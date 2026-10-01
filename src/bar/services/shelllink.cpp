@@ -52,6 +52,29 @@ ShellLink::Task taskFromJson(const QJsonObject &o)
     return t;
 }
 
+ShellLink::TrayIcon trayIconFromJson(const QJsonObject &o)
+{
+    ShellLink::TrayIcon t;
+    t.id = o.value("id").toInt();
+    t.pid = quint32(o.value("pid").toInteger());
+    t.tip = o.value("tip").toString();
+    t.icon = quintptr(o.value("icon").toInteger());
+    t.hidden = o.value("hidden").toBool();
+    return t;
+}
+
+bool sendTo(HWND target, HWND from, const QJsonObject &message)
+{
+    const QByteArray payload = QJsonDocument(message).toJson(QJsonDocument::Compact);
+    COPYDATASTRUCT cds{};
+    cds.dwData = kLinkMagic;
+    cds.cbData = DWORD(payload.size());
+    cds.lpData = const_cast<char *>(payload.constData());
+    DWORD_PTR result = 0;
+    return SendMessageTimeoutW(target, WM_COPYDATA, WPARAM(from), LPARAM(&cds), SMTO_ABORTIFHUNG, 1000, &result)
+           && result;
+}
+
 } // namespace
 
 ShellLink::ShellLink(QObject *parent)
@@ -88,16 +111,8 @@ void ShellLink::hello()
     if (!shell)
         return;
 
-    const QByteArray payload =
-        QJsonDocument(QJsonObject{{"type", "hello"}, {"version", QCoreApplication::applicationVersion()}})
-            .toJson(QJsonDocument::Compact);
-    COPYDATASTRUCT cds{};
-    cds.dwData = kLinkMagic;
-    cds.cbData = DWORD(payload.size());
-    cds.lpData = const_cast<char *>(payload.constData());
-    DWORD_PTR result = 0;
-    if (!SendMessageTimeoutW(shell, WM_COPYDATA, WPARAM(m_hwnd), LPARAM(&cds), SMTO_ABORTIFHUNG, 1000, &result)
-        || !result) {
+    if (!sendTo(shell, static_cast<HWND>(m_hwnd),
+                {{"type", "hello"}, {"version", QCoreApplication::applicationVersion()}})) {
         qWarning() << "visor: visor-shell did not answer hello";
         return;
     }
@@ -117,6 +132,30 @@ void ShellLink::hello()
     m_shell = shell;
     qInfo() << "visor: connected to visor-shell";
     emit connectedChanged();
+}
+
+void ShellLink::grantForeground(quint32 pid)
+{
+    const HWND self = static_cast<HWND>(m_hwnd);
+    const HWND foreground = GetForegroundWindow();
+    if (foreground && foreground != self) {
+        // Sharing the foreground thread's input state lifts the foreground
+        // lock for this call.
+        const DWORD foregroundThread = GetWindowThreadProcessId(foreground, nullptr);
+        const DWORD thread = GetCurrentThreadId();
+        const bool attached = foregroundThread != thread && AttachThreadInput(thread, foregroundThread, TRUE);
+        SetForegroundWindow(self);
+        if (attached)
+            AttachThreadInput(thread, foregroundThread, FALSE);
+    }
+    if (pid && pid != GetCurrentProcessId())
+        AllowSetForegroundWindow(pid);
+}
+
+void ShellLink::send(const QJsonObject &message)
+{
+    if (m_shell)
+        sendTo(static_cast<HWND>(m_shell), static_cast<HWND>(m_hwnd), message);
 }
 
 void ShellLink::disconnect()
@@ -139,8 +178,10 @@ void ShellLink::disconnect()
     m_shell = nullptr;
     m_tasks.clear();
     m_active = 0;
+    m_trayIcons.clear();
     emit tasksReset();
     emit activeTaskChanged();
+    emit trayReset();
     emit connectedChanged();
 }
 
@@ -199,6 +240,33 @@ void ShellLink::onMessage(const QByteArray &json)
     } else if (type == "task.activated") {
         m_active = quintptr(m.value("hwnd").toInteger());
         emit activeTaskChanged();
+    } else if (type == "tray.reset") {
+        m_trayIcons.clear();
+        for (const QJsonValue &v : m.value("icons").toArray())
+            m_trayIcons.append(trayIconFromJson(v.toObject()));
+        emit trayReset();
+    } else if (type == "tray.added") {
+        const TrayIcon t = trayIconFromJson(m.value("icon").toObject());
+        m_trayIcons.append(t);
+        emit trayIconAdded(t);
+    } else if (type == "tray.changed") {
+        const TrayIcon t = trayIconFromJson(m.value("icon").toObject());
+        for (TrayIcon &existing : m_trayIcons) {
+            if (existing.id == t.id) {
+                existing = t;
+                emit trayIconChanged(t);
+                break;
+            }
+        }
+    } else if (type == "tray.removed") {
+        const int id = m.value("id").toInt();
+        for (qsizetype i = 0; i < m_trayIcons.size(); ++i) {
+            if (m_trayIcons[i].id == id) {
+                m_trayIcons.removeAt(i);
+                emit trayIconRemoved(id);
+                break;
+            }
+        }
     } else if (type == "quit") {
         emit quitRequested();
     }

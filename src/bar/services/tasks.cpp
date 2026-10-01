@@ -130,7 +130,9 @@ void Tasks::activate(double hwnd)
     }
     if (IsIconic(w))
         ShowWindowAsync(w, SW_RESTORE);
-    // Allowed: we received the click that triggered this.
+    // Clicks on the bar don't give us foreground rights by themselves.
+    if (ShellLink *link = ShellLink::instance())
+        link->grantForeground(0);
     SetForegroundWindow(w);
 }
 

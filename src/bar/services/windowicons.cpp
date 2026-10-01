@@ -75,3 +75,28 @@ QImage WindowIconProvider::requestImage(const QString &id, QSize *size, const QS
         *size = image.size();
     return image;
 }
+
+TrayIconProvider::TrayIconProvider()
+    : QQuickImageProvider(QQuickImageProvider::Image)
+{
+}
+
+QImage TrayIconProvider::requestImage(const QString &id, QSize *size, const QSize &requestedSize)
+{
+    const auto icon = reinterpret_cast<HICON>(quintptr(id.toULongLong()));
+    QImage image;
+    ICONINFO info{};
+    // Guards against a handle visor-shell has already replaced.
+    if (icon && GetIconInfo(icon, &info)) {
+        if (info.hbmColor)
+            DeleteObject(info.hbmColor);
+        if (info.hbmMask)
+            DeleteObject(info.hbmMask);
+        image = QImage::fromHICON(icon);
+    }
+    if (!image.isNull() && requestedSize.isValid() && !requestedSize.isEmpty() && image.size() != requestedSize)
+        image = image.scaled(requestedSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    if (size)
+        *size = image.size();
+    return image;
+}

@@ -64,6 +64,7 @@ void Shell::load()
     next->engine = std::make_unique<QQmlEngine>();
     next->engine->addImportPath(m_configDir);
     next->engine->addImageProvider(QStringLiteral("visor-window-icon"), new WindowIconProvider);
+    next->engine->addImageProvider(QStringLiteral("visor-tray-icon"), new TrayIconProvider);
     connect(next->engine.get(), &QQmlEngine::quit, QCoreApplication::instance(), &QCoreApplication::quit,
             Qt::QueuedConnection);
     connect(next->engine.get(), &QQmlEngine::exit, QCoreApplication::instance(), &QCoreApplication::exit,

@@ -66,6 +66,7 @@ config can put them in the bar itself.
 | `ActiveWindow` | singleton | Focused window: `title`, `appName`, `processPath`, `processId`, `className`. |
 | `Audio` | singleton | Default output device: `volume` (0–1, writable), `muted` (writable), `deviceName`, `toggleMute()`. |
 | `Media` | singleton | Current media session: `title`, `artist`, `album`, `appId`, `playing`, `playPause()`, `next()`, `previous()`. |
+| `SystemTray` | singleton model | Notification-area icons, hosted by [visor-shell](../visor-shell) (empty without it). Roles: `iconId`, `tooltip`, `icon`, `processId`. `click(iconId, button)` with `"left"`, `"right"`, `"middle"` or `"double"` forwards the click to the app. |
 | `Tasks` | singleton model | Open app windows, from [visor-shell](../visor-shell) (empty without it; `available` says which). Roles: `hwnd`, `title`, `appName`, `processPath`, `active`, `flashing`, `icon` (an `image://` URL). `activate(hwnd)` (focus, or minimise if focused), `minimize(hwnd)`, `close(hwnd)`. |
 
 One bar per monitor:

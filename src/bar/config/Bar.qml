@@ -67,6 +67,10 @@ PanelWindow {
         anchors.bottom: parent.bottom
         spacing: 16
 
+        TrayArea {
+            anchors.verticalCenter: parent.verticalCenter
+        }
+
         // Click: play/pause. Hidden when nothing is playing.
         Item {
             visible: Media.available && Media.title !== ""

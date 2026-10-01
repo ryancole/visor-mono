@@ -11,3 +11,13 @@ public:
 
     QImage requestImage(const QString &id, QSize *size, const QSize &requestedSize) override;
 };
+
+// image://visor-tray-icon/<hicon>: a notification-area icon. The HICON is
+// visor-shell's copy; icons are session-wide, so it can be drawn from here.
+class TrayIconProvider : public QQuickImageProvider
+{
+public:
+    TrayIconProvider();
+
+    QImage requestImage(const QString &id, QSize *size, const QSize &requestedSize) override;
+};
