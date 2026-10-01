@@ -38,11 +38,15 @@ target_link_libraries(visor-session PRIVATE shell32 ole32)
 # tray, appbars, tasks). QtCore only; no UI toolkit.
 qt_add_executable(visor-shell WIN32
     common/exitcodes.h
+    common/linkprotocol.h
     shell/main.cpp
     shell/log.h shell/log.cpp
     shell/launch.h shell/launch.cpp
     shell/desktopwindow.h shell/desktopwindow.cpp
     shell/hotkeys.h shell/hotkeys.cpp
+    shell/wallpaper.h shell/wallpaper.cpp
+    shell/tasks.h shell/tasks.cpp
+    shell/visorlink.h shell/visorlink.cpp
 )
 target_include_directories(visor-shell PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_definitions(visor-shell PRIVATE ${VISOR_DEFINITIONS})
@@ -53,6 +57,8 @@ target_link_libraries(visor-shell PRIVATE
     user32
     shell32
     ole32
+    windowscodecs
+    dwmapi
 )
 
 # Copy the Qt runtime next to the exe so the build dir runs (and deploys)

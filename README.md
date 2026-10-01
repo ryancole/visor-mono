@@ -4,13 +4,13 @@ A replacement for `explorer.exe` as the Windows shell, built around
 [Visor](../visor). The goal is an Omarchy-style desktop: tiling, keyboard-driven,
 themeable. C++ / Qt (QtCore only), event-driven, small.
 
-Status: **phase 0**, a minimal shell for testing what breaks without Explorer.
+Status: **phase 1**: desktop, wallpaper, task list in Visor, Visor supervision. Phase 0 results (what breaks without Explorer) are in [docs/phase0-compat.md](docs/phase0-compat.md).
 See [docs/design.md](docs/design.md) for the architecture and plan.
 
 | Program | What it is |
 | --- | --- |
 | `visor-session.exe` | What Windows starts at sign-in. Plain Win32, static CRT, no Qt. Starts `visor-shell`, restarts it after a crash, and falls back to Explorer when it can't run. |
-| `visor-shell.exe` | Shell services: desktop window, the shell-ready signal and hotkeys today; tray, appbars and tasks later. Draws no UI of its own. Visor does that. |
+| `visor-shell.exe` | Shell services: desktop and wallpaper, the shell-ready signal, hotkeys, window (task) tracking, and starting and supervising Visor. Tray and appbars come next. Draws no UI of its own. Visor does that, over the link in [`src/common/linkprotocol.h`](src/common/linkprotocol.h). |
 
 ## Safety first
 

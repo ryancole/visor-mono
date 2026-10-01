@@ -12,7 +12,7 @@ Fill in each result as ✅ works, ❌ broken, or ⚠️ partly works, and add no
 | --- | --- | --- | --- |
 | Sign-in reaches our desktop without a ~30 s wait | Sign out, then sign in | ✅ | About 3 s from Winlogon's notifications to our ready signal |
 | `ShellDesktopSwitchEvent` signalled | `shell.log` | ✅ | |
-| Wallpaper drawn by `PaintDesktop` | Look at the desktop | ❌ | Black, even after re-applying the wallpaper with `SPI_SETDESKWALLPAPER` at runtime (the configured wallpaper is the default Spotlight JPEG, Fill mode). We render it ourselves (phase 1) |
+| Wallpaper drawn by `PaintDesktop` | Look at the desktop | ❌ | Black, even after re-applying the wallpaper with `SPI_SETDESKWALLPAPER` at runtime (the configured wallpaper is the default Spotlight JPEG, Fill mode). Fixed in phase 1: visor-shell decodes and scales the wallpaper itself with WIC, honouring the fit mode, with nothing cached (2.4 MB private) |
 | Winlogon restarts the shell when it dies | Kill `visor-shell` and `visor-session` | ✅ | **AutoRestartShell applies to custom shells too.** Killing `visor-shell` (which owns the shell window) relaunches the HKCU shell almost immediately. Killing only `visor-session` does not. `visor-session` is single-instance so the two restarts don't race |
 | Memory | `Get-Process` | ✅ | Private memory: `visor-session` 1.4 MB, `visor-shell` 2.3 MB, Visor 26 MB |
 | Shift at sign-in falls back to Explorer | Hold Shift while signing in | | |
@@ -28,7 +28,7 @@ Fill in each result as ✅ works, ❌ broken, or ⚠️ partly works, and add no
 | --- | --- | --- | --- |
 | File Explorer opens as a window, not as the shell | Ctrl+Alt+E | ✅ | Opens on This PC, with no taskbar or desktop takeover |
 | Win32 app (Notepad) | Run → `notepad` | ✅ | This launched the **packaged** Notepad (WindowsApps, with tabs): full-trust packaged apps work |
-| Run dialog | Ctrl+Alt+R | ✅ | It runs inside visor-shell, so a launch that hangs (see Settings) blocks the shell. Launch apps off the UI thread (phase 1) |
+| Run dialog | Ctrl+Alt+R | ✅ | It runs inside visor-shell, so a launch that hangs (see Settings) blocks the shell. Fixed in phase 1: launches and the Run dialog now run on worker threads. A hanging `ms-settings:` no longer blocks hotkeys |
 | Settings app | Run → `ms-settings:` | ❌ | No window and no SystemSettings process. The launch blocked the shell's input for a while, then gave up |
 | Store app (Calculator) | Run → `calc` | ❌ | `CalculatorApp.exe` starts but never gets a window: UWP/CoreWindow apps have no immersive shell to host them |
 | Windows Terminal (packaged) | Ctrl+Alt+T | ✅ | Full-trust packaged app; `wt.exe` alias works |
@@ -41,3 +41,5 @@ Fill in each result as ✅ works, ❌ broken, or ⚠️ partly works, and add no
 | Volume / brightness keys show an OSD | | | |
 | Visor runs, and its bar reserves space | `deploy.ps1 -Visor` | ⚠️ | Visor runs and tracks the active window correctly (26 MB). It reserves no space yet (needs the appbar server, phase 2). It keeps running after handover to Explorer |
 | Tray icons appear anywhere | | | Expected ❌ until the tray host exists (phase 2) |
+| Minimised windows | Minimise any window | ✅ | With no taskbar, Windows parks them as Win 3.1-style title-bar stubs at the bottom-left. Fixed in phase 1: while Visor is connected (and lists them), visor-shell sets `ARW_HIDE` for the session and restores the old value when Visor goes away. Windows minimised before that keep their stub until restored |
+| Stopping Explorer starts our shell | Kill explorer.exe while it is the shell | ✅ | Winlogon relaunches the configured (HKCU) shell. Switches a session from Explorer back to visor-shell without signing out |

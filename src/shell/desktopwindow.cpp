@@ -1,5 +1,7 @@
 #include "shell/desktopwindow.h"
 
+#include "shell/wallpaper.h"
+
 #include <QDebug>
 
 #include <windows.h>
@@ -107,10 +109,9 @@ void DesktopWindow::paint()
     PAINTSTRUCT ps;
     HDC dc = BeginPaint(hwnd, &ps);
 
-    // win32k still keeps the user's wallpaper; PaintDesktop draws it (with the
-    // chosen fit mode) the way Progman used to. Whether it still does so on
-    // current builds is one of the phase 0 checks.
-    PaintDesktop(dc);
+    // PaintDesktop draws nothing without Explorer (phase 0), so render the
+    // wallpaper ourselves.
+    paintWallpaper(dc, ps.rcPaint);
 
     // Hints on the primary monitor, whose top-left is screen (0, 0).
     const int originX = -GetSystemMetrics(SM_XVIRTUALSCREEN);

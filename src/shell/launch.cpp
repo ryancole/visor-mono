@@ -3,11 +3,32 @@
 #include <QDebug>
 
 #include <windows.h>
+#include <objbase.h>
 #include <shellapi.h>
+
+#include <atomic>
+#include <functional>
+#include <thread>
 
 namespace visor {
 
-bool shellExecute(const QString &file, const QString &parameters)
+namespace {
+
+// Launching can block for a long time: activating an app that can't start
+// (e.g. Settings without Explorer) hangs ShellExecuteEx until it times out.
+// Each launch therefore runs on its own short-lived STA thread, so the
+// shell's thread (desktop, hotkeys, later tray and appbars) never stalls.
+void runDetached(std::function<void()> work)
+{
+    std::thread([work = std::move(work)] {
+        const HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+        work();
+        if (SUCCEEDED(hr))
+            CoUninitialize();
+    }).detach();
+}
+
+bool shellExecuteSync(const QString &file, const QString &parameters)
 {
     SHELLEXECUTEINFOW info{};
     info.cbSize = sizeof(info);
@@ -23,6 +44,13 @@ bool shellExecute(const QString &file, const QString &parameters)
     return false;
 }
 
+} // namespace
+
+void shellExecute(const QString &file, const QString &parameters)
+{
+    runDetached([file, parameters] { shellExecuteSync(file, parameters); });
+}
+
 void openFileExplorer()
 {
     shellExecute(QStringLiteral("explorer.exe"), QStringLiteral("::{20D04FE0-3AEA-1069-A2D8-08002B30309D}"));
@@ -32,20 +60,35 @@ void openTerminal()
 {
     // wt.exe is a packaged app's execution alias, so this doubles as a check
     // of whether packaged apps launch under this shell.
-    if (!shellExecute(QStringLiteral("wt.exe")))
-        shellExecute(QStringLiteral("cmd.exe"));
+    runDetached([] {
+        if (!shellExecuteSync(QStringLiteral("wt.exe"), {}))
+            shellExecuteSync(QStringLiteral("cmd.exe"), {});
+    });
 }
 
-void showRunDialog(void *ownerHwnd)
+void showRunDialog()
 {
+    // One at a time: pressing the hotkey again while it's open does nothing.
+    static std::atomic_bool open = false;
+    if (open.exchange(true))
+        return;
+
     using RunFileDlgFn = void(WINAPI *)(HWND, HICON, LPCWSTR, LPCWSTR, LPCWSTR, UINT);
     static const auto runFileDlg = reinterpret_cast<RunFileDlgFn>(
         GetProcAddress(GetModuleHandleW(L"shell32.dll"), MAKEINTRESOURCEA(61)));
     if (!runFileDlg) {
         qWarning() << "RunFileDlg not available";
+        open = false;
         return;
     }
-    runFileDlg(static_cast<HWND>(ownerHwnd), nullptr, nullptr, nullptr, nullptr, 0);
+
+    // The dialog launches whatever is typed from inside its own modal loop,
+    // so it lives on a worker thread too. No owner window: an owner on the
+    // shell's thread would tie the two threads' input together again.
+    runDetached([] {
+        runFileDlg(nullptr, nullptr, nullptr, nullptr, nullptr, 0);
+        open = false;
+    });
 }
 
 } // namespace visor

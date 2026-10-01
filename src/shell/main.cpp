@@ -12,13 +12,14 @@
 #include "shell/hotkeys.h"
 #include "shell/launch.h"
 #include "shell/log.h"
+#include "shell/tasks.h"
+#include "shell/visorlink.h"
 
 #include <QCommandLineParser>
 #include <QCoreApplication>
 #include <QDebug>
-#include <QDir>
-#include <QFileInfo>
-#include <QProcess>
+#include <QJsonArray>
+#include <QJsonObject>
 
 #include <windows.h>
 #include <objbase.h>
@@ -43,20 +44,46 @@ void signalShellReady()
     qInfo() << "signalled ShellDesktopSwitchEvent";
 }
 
-// Phase 0: Visor is started once if it was deployed next to us (visor\visor.exe).
-// Supervising it comes with the VisorLink work in phase 1.
-void startVisor()
+QJsonObject toJson(const visor::Tasks::Task &task)
 {
-    const QString path = QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("visor/visor.exe"));
-    if (!QFileInfo::exists(path)) {
-        qInfo() << "Visor not deployed at" << path;
-        return;
-    }
-    if (QProcess::startDetached(path, {}, QFileInfo(path).absolutePath()))
-        qInfo() << "started Visor";
-    else
-        qWarning() << "failed to start Visor at" << path;
+    return {
+        {QStringLiteral("hwnd"), qint64(task.hwnd)},
+        {QStringLiteral("title"), task.title},
+        {QStringLiteral("pid"), qint64(task.pid)},
+        {QStringLiteral("path"), task.path},
+        {QStringLiteral("flashing"), task.flashing},
+    };
 }
+
+// With no taskbar, Windows parks minimised windows as title-bar stubs in the
+// bottom-left corner. While Visor is connected (and can list them) hide them
+// the way Explorer does; otherwise put back what was there, so minimised
+// windows stay reachable. Session-only: never written to the profile.
+class MinimizedWindows
+{
+public:
+    MinimizedWindows()
+    {
+        m_saved.cbSize = sizeof(m_saved);
+        SystemParametersInfoW(SPI_GETMINIMIZEDMETRICS, sizeof(m_saved), &m_saved, 0);
+    }
+    ~MinimizedWindows() { setHidden(false); }
+
+    void setHidden(bool hidden)
+    {
+        if (hidden == m_hidden)
+            return;
+        MINIMIZEDMETRICS metrics = m_saved;
+        if (hidden)
+            metrics.iArrange = ARW_HIDE;
+        SystemParametersInfoW(SPI_SETMINIMIZEDMETRICS, sizeof(metrics), &metrics, 0);
+        m_hidden = hidden;
+    }
+
+private:
+    MINIMIZEDMETRICS m_saved{};
+    bool m_hidden = false;
+};
 
 } // namespace
 
@@ -117,12 +144,43 @@ int main(int argc, char *argv[])
         if (!desktop->show())
             return visor::exitcode::Refused;
         signalShellReady();
-        startVisor();
     }
 
+    // Tasks are sent to Visor as they change; a (re)connecting Visor gets the
+    // whole list.
+    visor::Tasks tasks(mode == Mode::Replace);
+    visor::VisorLink link;
+    MinimizedWindows minimized;
+
+    QObject::connect(&link, &visor::VisorLink::clientConnected, &app, [&] {
+        QJsonArray list;
+        for (const visor::Tasks::Task &t : tasks.tasks())
+            list.append(toJson(t));
+        link.send({{QStringLiteral("type"), QStringLiteral("tasks.reset")},
+                   {QStringLiteral("tasks"), list},
+                   {QStringLiteral("active"), qint64(tasks.active())}});
+        if (mode == Mode::Replace)
+            minimized.setHidden(true);
+    });
+    QObject::connect(&link, &visor::VisorLink::clientDisconnected, &app, [&] { minimized.setHidden(false); });
+    QObject::connect(&tasks, &visor::Tasks::added, &app, [&](const visor::Tasks::Task &t) {
+        link.send({{QStringLiteral("type"), QStringLiteral("task.added")}, {QStringLiteral("task"), toJson(t)}});
+    });
+    QObject::connect(&tasks, &visor::Tasks::changed, &app, [&](const visor::Tasks::Task &t) {
+        link.send({{QStringLiteral("type"), QStringLiteral("task.changed")}, {QStringLiteral("task"), toJson(t)}});
+    });
+    QObject::connect(&tasks, &visor::Tasks::removed, &app, [&](quintptr hwnd) {
+        link.send({{QStringLiteral("type"), QStringLiteral("task.removed")}, {QStringLiteral("hwnd"), qint64(hwnd)}});
+    });
+    QObject::connect(&tasks, &visor::Tasks::activated, &app, [&](quintptr hwnd) {
+        link.send({{QStringLiteral("type"), QStringLiteral("task.activated")}, {QStringLiteral("hwnd"), qint64(hwnd)}});
+    });
+
+    // Under Explorer the user runs Visor themselves; it still connects.
+    link.start(mode == Mode::Replace);
+
     visor::Hotkeys hotkeys;
-    // Queued so long-running actions (the Run dialog's modal loop) run outside
-    // the WM_HOTKEY handler.
+    // Queued so actions run outside the WM_HOTKEY handler.
     QObject::connect(
         &hotkeys, &visor::Hotkeys::triggered, &app,
         [&](visor::Hotkeys::Action action) {
@@ -134,10 +192,12 @@ int main(int argc, char *argv[])
                 visor::openTerminal();
                 break;
             case visor::Hotkeys::ShowRun:
-                visor::showRunDialog(desktop ? desktop->hwnd() : nullptr);
+                visor::showRunDialog();
                 break;
             case visor::Hotkeys::QuitToExplorer:
                 qInfo() << "quit requested";
+                if (mode == Mode::Replace)
+                    link.stopVisor();
                 // As the shell, ask visor-session to hand over to Explorer.
                 // Hosted, Explorer is already there: just exit.
                 QCoreApplication::exit(mode == Mode::Replace ? visor::exitcode::StartExplorer : 0);
