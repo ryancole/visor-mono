@@ -39,7 +39,9 @@ Fill in each result as ✅ works, ❌ broken, or ⚠️ partly works, and add no
 | Win+Shift+S (snip) / Win+V (clipboard) / Win+. (emoji) | Press each | | |
 | Snap: drag to an edge, and Win+arrows | | ❌ | Dragging to the left edge shows no snap preview; the window just moves off-screen. Win+arrows not tested |
 | Volume / brightness keys show an OSD | | | |
-| Visor runs, and its bar reserves space | `deploy.ps1 -Visor` | ⚠️ | Visor runs and tracks the active window correctly (26 MB). It reserves no space yet (needs the appbar server, phase 2). It keeps running after handover to Explorer |
-| Tray icons appear anywhere | | | Expected ❌ until the tray host exists (phase 2) |
+| Visor runs, and its bar reserves space | `deploy.ps1 -Visor` | ✅ | Phase 2: visor-shell serves `SHAppBarMessage`. Visor's bar registers, the work area becomes 0,32–1024,768, and maximised windows stop below the bar |
+| Tray icons appear anywhere | | ✅ | Phase 2: visor-shell is `Shell_TrayWnd` and Visor draws the icons. Seen: OneDrive, Windows Security, the classic volume icon (from the SysTray shell service object, which costs about 5 MB and some threads in visor-shell), and Visor's own |
+| Tray clicks reach apps | Right-click Visor's and OneDrive's icons | ✅ | Menus open at the click point and close on Escape. OneDrive's Activity Center docks under the bar. Visor has to take the foreground first (attach to the foreground thread's input) and pass it on: clicks on its `WS_EX_NOACTIVATE` bar give it no foreground rights. Volume icon click: no visible flyout (the VM has no audio device; Win11's flyout lived in Explorer) |
+| Fullscreen apps hide the bar | F11 in Terminal | ✅ | `ABN_FULLSCREENAPP` on foreground changes and `HSHELL_FULLSCREENENTER/EXIT`; the bar comes back on exit |
 | Minimised windows | Minimise any window | ✅ | With no taskbar, Windows parks them as Win 3.1-style title-bar stubs at the bottom-left. Fixed in phase 1: while Visor is connected (and lists them), visor-shell sets `ARW_HIDE` for the session and restores the old value when Visor goes away. Windows minimised before that keep their stub until restored |
 | Stopping Explorer starts our shell | Kill explorer.exe while it is the shell | ✅ | Winlogon relaunches the configured (HKCU) shell. Switches a session from Explorer back to visor-shell without signing out |

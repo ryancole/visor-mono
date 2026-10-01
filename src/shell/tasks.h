@@ -42,6 +42,8 @@ signals:
     void changed(const visor::Tasks::Task &task);
     void removed(quintptr hwnd);
     void activated(quintptr hwnd);
+    // A window entered or left fullscreen (HSHELL_FULLSCREENENTER/EXIT).
+    void fullscreenChanged();
 
 private:
     void add(quintptr hwnd);

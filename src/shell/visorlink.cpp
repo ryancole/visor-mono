@@ -222,7 +222,11 @@ std::intptr_t VisorLink::handleMessage(void *window, unsigned msg, std::uintptr_
         QMetaObject::invokeMethod(this, &VisorLink::clientConnected, Qt::QueuedConnection);
         return TRUE;
     }
-    return FALSE;
+    if (reinterpret_cast<HWND>(wParam) != static_cast<HWND>(m_client))
+        return FALSE;
+    // Handled from the event loop: replies must not nest inside Visor's send.
+    QMetaObject::invokeMethod(this, [this, message] { emit messageReceived(message); }, Qt::QueuedConnection);
+    return TRUE;
 }
 
 } // namespace visor

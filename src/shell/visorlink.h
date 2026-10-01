@@ -46,6 +46,8 @@ signals:
     void clientConnected();
     // The connected Visor exited.
     void clientDisconnected();
+    // Any other message from Visor (e.g. "tray.click").
+    void messageReceived(const QJsonObject &message);
 
 private:
     void launch();

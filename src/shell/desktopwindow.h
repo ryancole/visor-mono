@@ -27,6 +27,10 @@ public:
     // Window procedure body; called from the Win32 window procedure.
     std::intptr_t handleMessage(unsigned msg, std::uintptr_t wParam, std::intptr_t lParam);
 
+signals:
+    // Monitors were added, removed, moved or resized.
+    void displayChanged();
+
 private:
     void fitToVirtualScreen();
     void paint();

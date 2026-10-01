@@ -14,15 +14,24 @@
 //
 // Visor -> shell:
 //   {"type":"hello","version":"..."}
+//   {"type":"tray.click","id":n,"button":"left"|"right"|"middle"|"double","x":n,"y":n}
+//                                               (screen position, physical px)
 // Shell -> Visor:
 //   {"type":"tasks.reset","tasks":[Task...],"active":hwnd}
 //   {"type":"task.added","task":Task}
 //   {"type":"task.changed","task":Task}
 //   {"type":"task.removed","hwnd":hwnd}
 //   {"type":"task.activated","hwnd":hwnd}      (0: nothing we track)
+//   {"type":"tray.reset","icons":[TrayIcon...]}
+//   {"type":"tray.added","icon":TrayIcon}
+//   {"type":"tray.changed","icon":TrayIcon}
+//   {"type":"tray.removed","id":n}
 //   {"type":"quit"}                             (handing the session to Explorer)
 // Task = {"hwnd":n,"title":"...","pid":n,"path":"...","flashing":bool}
-// HWNDs travel as JSON numbers; their values fit in 32 bits.
+// TrayIcon = {"id":n,"pid":n,"tip":"...","icon":hicon,"hidden":bool}
+//   icon is an HICON owned by visor-shell (icons are session-wide USER
+//   objects, so Visor can draw it directly); it changes whenever the image does.
+// HWNDs and HICONs travel as JSON numbers; their values fit in 32 bits.
 namespace visor::link {
 
 constexpr unsigned long kLinkMagic = 0x56534C31; // 'VSL1'

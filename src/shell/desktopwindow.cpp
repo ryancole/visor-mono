@@ -162,6 +162,7 @@ std::intptr_t DesktopWindow::handleMessage(unsigned msg, std::uintptr_t wParam, 
         return 0;
     case WM_DISPLAYCHANGE:
         fitToVirtualScreen();
+        emit displayChanged();
         return 0;
     case WM_DPICHANGED:
         // We size ourselves to the virtual screen; ignore the suggested rect.

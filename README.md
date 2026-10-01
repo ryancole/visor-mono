@@ -4,13 +4,13 @@ A replacement for `explorer.exe` as the Windows shell, built around
 [Visor](../visor). The goal is an Omarchy-style desktop: tiling, keyboard-driven,
 themeable. C++ / Qt (QtCore only), event-driven, small.
 
-Status: **phase 1**: desktop, wallpaper, task list in Visor, Visor supervision. Phase 0 results (what breaks without Explorer) are in [docs/phase0-compat.md](docs/phase0-compat.md).
+Status: **phase 2**: desktop, wallpaper, task list and tray in Visor, app bars and work areas, fullscreen detection, Visor supervision. Phase 0 results (what breaks without Explorer) are in [docs/phase0-compat.md](docs/phase0-compat.md).
 See [docs/design.md](docs/design.md) for the architecture and plan.
 
 | Program | What it is |
 | --- | --- |
 | `visor-session.exe` | What Windows starts at sign-in. Plain Win32, static CRT, no Qt. Starts `visor-shell`, restarts it after a crash, and falls back to Explorer when it can't run. |
-| `visor-shell.exe` | Shell services: desktop and wallpaper, the shell-ready signal, hotkeys, window (task) tracking, and starting and supervising Visor. Tray and appbars come next. Draws no UI of its own. Visor does that, over the link in [`src/common/linkprotocol.h`](src/common/linkprotocol.h). |
+| `visor-shell.exe` | Shell services: desktop and wallpaper, the shell-ready signal, hotkeys, window (task) tracking, the notification area (`Shell_TrayWnd`), the app bar server, and starting and supervising Visor. Draws no UI of its own. Visor does that, over the link in [`src/common/linkprotocol.h`](src/common/linkprotocol.h). |
 
 ## Safety first
 
@@ -52,7 +52,12 @@ pwsh etc/vm/deploy.ps1 -Install           # copy the build and make it the VM us
 pwsh etc/vm/deploy.ps1                    # later deploys: copy and restart the shell
 pwsh etc/vm/deploy.ps1 -Visor             # also ship ../visor/build/release
 pwsh etc/vm/deploy.ps1 -Restore           # back to Explorer
+pwsh etc/vm/screenshot.ps1                # the VM's screen -> build/vm-screen.png
+pwsh etc/vm/input.ps1 -Click 948,16 -Button right   # click inside the VM
+pwsh etc/vm/input.ps1 -Key ctrl+alt+r     # press keys inside the VM
 ```
+
+`screenshot.ps1` and `input.ps1` work through Hyper-V and PowerShell Direct, so they need no VM window or focus on the host. Note that Windows 11 opens console programs in Windows Terminal, which takes the foreground. The input helper runs under `conhost --headless` so it doesn't disturb what it is testing.
 
 ## Phase 0 hotkeys
 

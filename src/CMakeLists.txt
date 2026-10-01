@@ -47,6 +47,8 @@ qt_add_executable(visor-shell WIN32
     shell/wallpaper.h shell/wallpaper.cpp
     shell/tasks.h shell/tasks.cpp
     shell/visorlink.h shell/visorlink.cpp
+    shell/appbars.h shell/appbars.cpp
+    shell/trayhost.h shell/trayhost.cpp
 )
 target_include_directories(visor-shell PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_definitions(visor-shell PRIVATE ${VISOR_DEFINITIONS})
@@ -59,6 +61,7 @@ target_link_libraries(visor-shell PRIVATE
     ole32
     windowscodecs
     dwmapi
+    shlwapi
 )
 
 # Copy the Qt runtime next to the exe so the build dir runs (and deploys)

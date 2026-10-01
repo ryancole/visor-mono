@@ -16,6 +16,8 @@ constexpr WPARAM kWindowReplaced = 13;
 constexpr WPARAM kWindowReplacing = 14;
 constexpr WPARAM kRudeAppActivated = HSHELL_WINDOWACTIVATED | HSHELL_HIGHBIT;
 constexpr WPARAM kFlash = HSHELL_REDRAW | HSHELL_HIGHBIT;
+constexpr WPARAM kFullscreenEnter = 53;
+constexpr WPARAM kFullscreenExit = 54;
 
 QList<Tasks *> &instances()
 {
@@ -250,6 +252,10 @@ std::intptr_t Tasks::handleMessage(void *window, unsigned msg, std::uintptr_t wP
         break;
     case HSHELL_REDRAW:
         refreshTitle(hwnd);
+        break;
+    case kFullscreenEnter:
+    case kFullscreenExit:
+        emit fullscreenChanged();
         break;
     case kFlash:
         for (Task &t : m_tasks) {

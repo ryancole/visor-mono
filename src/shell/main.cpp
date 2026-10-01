@@ -8,11 +8,13 @@
 // The default, auto, picks replace only when no shell window exists yet.
 
 #include "common/exitcodes.h"
+#include "shell/appbars.h"
 #include "shell/desktopwindow.h"
 #include "shell/hotkeys.h"
 #include "shell/launch.h"
 #include "shell/log.h"
 #include "shell/tasks.h"
+#include "shell/trayhost.h"
 #include "shell/visorlink.h"
 
 #include <QCommandLineParser>
@@ -52,6 +54,17 @@ QJsonObject toJson(const visor::Tasks::Task &task)
         {QStringLiteral("pid"), qint64(task.pid)},
         {QStringLiteral("path"), task.path},
         {QStringLiteral("flashing"), task.flashing},
+    };
+}
+
+QJsonObject toJson(const visor::TrayHost::Icon &icon)
+{
+    return {
+        {QStringLiteral("id"), icon.id},
+        {QStringLiteral("pid"), qint64(icon.pid)},
+        {QStringLiteral("tip"), icon.tip},
+        {QStringLiteral("icon"), qint64(icon.icon)},
+        {QStringLiteral("hidden"), icon.hidden},
     };
 }
 
@@ -146,11 +159,46 @@ int main(int argc, char *argv[])
         signalShellReady();
     }
 
-    // Tasks are sent to Visor as they change; a (re)connecting Visor gets the
-    // whole list.
+    // As the shell we also serve app bars and host the tray (Explorer does
+    // both otherwise). Before Visor starts, so its bars and icon land here.
+    std::unique_ptr<visor::AppBars> appBars;
+    std::unique_ptr<visor::TrayHost> tray;
+    if (mode == Mode::Replace) {
+        appBars = std::make_unique<visor::AppBars>();
+        tray = std::make_unique<visor::TrayHost>(appBars.get());
+        QObject::connect(desktop.get(), &visor::DesktopWindow::displayChanged, appBars.get(),
+                         &visor::AppBars::displayChanged);
+    }
+
+    // Tasks and tray icons are sent to Visor as they change; a (re)connecting
+    // Visor gets the whole lists.
     visor::Tasks tasks(mode == Mode::Replace);
     visor::VisorLink link;
     MinimizedWindows minimized;
+
+    if (appBars) {
+        QObject::connect(&tasks, &visor::Tasks::activated, appBars.get(), &visor::AppBars::checkFullscreen);
+        QObject::connect(&tasks, &visor::Tasks::fullscreenChanged, appBars.get(), &visor::AppBars::checkFullscreen);
+        // A crashed Visor leaves its bars registered.
+        QObject::connect(&link, &visor::VisorLink::clientDisconnected, appBars.get(), &visor::AppBars::prune);
+    }
+    if (tray) {
+        QObject::connect(tray.get(), &visor::TrayHost::iconAdded, &app, [&](const visor::TrayHost::Icon &i) {
+            link.send({{QStringLiteral("type"), QStringLiteral("tray.added")}, {QStringLiteral("icon"), toJson(i)}});
+        });
+        QObject::connect(tray.get(), &visor::TrayHost::iconChanged, &app, [&](const visor::TrayHost::Icon &i) {
+            link.send({{QStringLiteral("type"), QStringLiteral("tray.changed")}, {QStringLiteral("icon"), toJson(i)}});
+        });
+        QObject::connect(tray.get(), &visor::TrayHost::iconRemoved, &app, [&](int id) {
+            link.send({{QStringLiteral("type"), QStringLiteral("tray.removed")}, {QStringLiteral("id"), id}});
+        });
+    }
+    QObject::connect(&link, &visor::VisorLink::messageReceived, &app, [&](const QJsonObject &m) {
+        if (tray && m.value(QStringLiteral("type")).toString() == QLatin1String("tray.click")) {
+            tray->click(m.value(QStringLiteral("id")).toInt(), m.value(QStringLiteral("button")).toString(),
+                        m.value(QStringLiteral("x")).toInt(), m.value(QStringLiteral("y")).toInt());
+        }
+    });
 
     QObject::connect(&link, &visor::VisorLink::clientConnected, &app, [&] {
         QJsonArray list;
@@ -159,6 +207,12 @@ int main(int argc, char *argv[])
         link.send({{QStringLiteral("type"), QStringLiteral("tasks.reset")},
                    {QStringLiteral("tasks"), list},
                    {QStringLiteral("active"), qint64(tasks.active())}});
+        if (tray) {
+            QJsonArray icons;
+            for (const visor::TrayHost::Icon &i : tray->icons())
+                icons.append(toJson(i));
+            link.send({{QStringLiteral("type"), QStringLiteral("tray.reset")}, {QStringLiteral("icons"), icons}});
+        }
         if (mode == Mode::Replace)
             minimized.setHidden(true);
     });
