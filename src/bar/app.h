@@ -8,10 +8,11 @@
 
 #include <memory>
 
+class ShellLink;
 class TrayIcon;
 
-// Process-wide controller: owns the QML shell and the tray icon, and applies
-// app-level settings. QML reaches it through the `Visor` singleton.
+// Process-wide controller: owns the QML shell, the tray icon and the link to
+// visor-shell, and applies app-level settings. QML reaches it through the `Visor` singleton.
 class App : public QObject
 {
     Q_OBJECT
@@ -50,4 +51,5 @@ private:
     Settings::Renderer m_preferredRenderer;
     Shell m_shell;
     std::unique_ptr<TrayIcon> m_tray;
+    std::unique_ptr<ShellLink> m_shellLink;
 };

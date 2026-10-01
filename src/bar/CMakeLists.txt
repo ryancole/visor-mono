@@ -4,6 +4,8 @@ qt_add_executable(visor WIN32
     settings.h settings.cpp
     shell.h shell.cpp
     tray.h tray.cpp
+    services/shelllink.h services/shelllink.cpp
+    services/windowicons.h services/windowicons.cpp
     resources/resource.h
     resources/visor.rc
 )
@@ -22,6 +24,7 @@ qt_add_qml_module(visor
         services/activewindow.h services/activewindow.cpp
         services/audio.h services/audio.cpp
         services/media.h services/media.cpp
+        services/tasks.h services/tasks.cpp
 )
 
 # services/ is listed too: the generated QML type registration includes

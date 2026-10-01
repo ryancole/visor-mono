@@ -1,5 +1,7 @@
 #include "shell.h"
 
+#include "services/windowicons.h"
+
 #include <QCoreApplication>
 #include <QDir>
 #include <QDirIterator>
@@ -61,6 +63,7 @@ void Shell::load()
     auto next = std::make_unique<Generation>();
     next->engine = std::make_unique<QQmlEngine>();
     next->engine->addImportPath(m_configDir);
+    next->engine->addImageProvider(QStringLiteral("visor-window-icon"), new WindowIconProvider);
     connect(next->engine.get(), &QQmlEngine::quit, QCoreApplication::instance(), &QCoreApplication::quit,
             Qt::QueuedConnection);
     connect(next->engine.get(), &QQmlEngine::exit, QCoreApplication::instance(), &QCoreApplication::exit,

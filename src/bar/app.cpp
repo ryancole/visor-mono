@@ -1,5 +1,6 @@
 #include "app.h"
 
+#include "services/shelllink.h"
 #include "tray.h"
 
 #include <QCoreApplication>
@@ -56,6 +57,9 @@ App *App::instance()
 void App::start()
 {
     m_tray = std::make_unique<TrayIcon>(this);
+    // Before the config loads, so QML types built on it start populated.
+    m_shellLink = std::make_unique<ShellLink>();
+    connect(m_shellLink.get(), &ShellLink::quitRequested, this, &App::quit);
     m_shell.load();
 }
 
