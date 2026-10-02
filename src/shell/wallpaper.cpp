@@ -1,6 +1,8 @@
 #include "shell/wallpaper.h"
 
 #include <QDebug>
+#include <QDir>
+#include <QFileInfo>
 #include <QSettings>
 #include <QString>
 
@@ -28,6 +30,39 @@ struct Settings
     COLORREF background = RGB(0, 0, 0);
 };
 
+QString expand(const QString &text)
+{
+    wchar_t out[MAX_PATH * 2] = {};
+    ExpandEnvironmentStringsW(text.toStdWString().c_str(), out, DWORD(std::size(out)));
+    return QString::fromWCharArray(out);
+}
+
+// Windows Spotlight (the default theme on a fresh Windows 11) names a
+// 280x175 placeholder as its wallpaper and relies on Explorer to swap in the
+// day's picture. Without Explorer that never happens, so while Spotlight is
+// the current theme show Windows' own wallpaper for the mode (what the
+// "Windows (light)" and "Windows (dark)" themes use) instead of a blown-up
+// thumbnail. Returns an empty path otherwise.
+QString spotlightFallback()
+{
+    const QSettings themes(QStringLiteral("HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes"),
+                           QSettings::NativeFormat);
+    const QString current = expand(themes.value(QStringLiteral("CurrentTheme")).toString());
+    if (current.isEmpty())
+        return {};
+    wchar_t spotlight[8] = {};
+    GetPrivateProfileStringW(L"Control Panel\\Desktop", L"WindowsSpotlight", L"", spotlight, DWORD(std::size(spotlight)),
+                             QDir::toNativeSeparators(current).toStdWString().c_str());
+    if (wcscmp(spotlight, L"1") != 0)
+        return {};
+    const QSettings personalize(
+        QStringLiteral("HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize"),
+        QSettings::NativeFormat);
+    const bool light = personalize.value(QStringLiteral("SystemUsesLightTheme"), 1).toInt() != 0;
+    const QString path = expand(QStringLiteral("%SystemRoot%\\Web\\Wallpaper\\Windows\\")) + (light ? QStringLiteral("img0.jpg") : QStringLiteral("img19.jpg"));
+    return QFileInfo::exists(path) ? path : QString();
+}
+
 Settings readSettings()
 {
     Settings s;
@@ -35,6 +70,14 @@ Settings readSettings()
     wchar_t path[MAX_PATH * 2] = {};
     if (SystemParametersInfoW(SPI_GETDESKWALLPAPER, DWORD(std::size(path)), path, 0))
         s.path = QString::fromWCharArray(path);
+    if (const QString fallback = spotlightFallback(); !fallback.isEmpty()) {
+        static bool logged = false;
+        if (!logged) {
+            qInfo() << "Windows Spotlight is the theme, which needs Explorer; showing" << fallback;
+            logged = true;
+        }
+        s.path = fallback;
+    }
 
     const QSettings desktop(QStringLiteral("HKEY_CURRENT_USER\\Control Panel\\Desktop"), QSettings::NativeFormat);
     const int style = desktop.value(QStringLiteral("WallpaperStyle"), 10).toString().toInt();

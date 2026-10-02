@@ -18,8 +18,8 @@ PanelWindow {
         precision: SystemClock.Minutes
     }
 
-    // Left: desktops and open windows (with visor-shell / visor-wm), focused
-    // app and window title.
+    // Left: desktops and open windows (with visor-shell / visor-wm) and the
+    // focused app.
     Row {
         id: left
         anchors.left: parent.left
@@ -81,13 +81,6 @@ PanelWindow {
                 color: Theme.accent
                 font.weight: Font.DemiBold
             }
-        }
-
-        Label {
-            anchors.verticalCenter: parent.verticalCenter
-            width: Math.max(0, left.width - x)
-            text: ActiveWindow.title
-            color: Theme.subtext
         }
     }
 
