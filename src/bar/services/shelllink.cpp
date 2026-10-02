@@ -135,20 +135,25 @@ void ShellLink::hello()
     emit connectedChanged();
 }
 
+void ShellLink::takeForeground(void *window)
+{
+    const HWND self = static_cast<HWND>(window);
+    const HWND foreground = GetForegroundWindow();
+    if (!foreground || foreground == self)
+        return;
+    // Sharing the foreground thread's input state lifts the foreground
+    // lock for this call.
+    const DWORD foregroundThread = GetWindowThreadProcessId(foreground, nullptr);
+    const DWORD thread = GetCurrentThreadId();
+    const bool attached = foregroundThread != thread && AttachThreadInput(thread, foregroundThread, TRUE);
+    SetForegroundWindow(self);
+    if (attached)
+        AttachThreadInput(thread, foregroundThread, FALSE);
+}
+
 void ShellLink::grantForeground(quint32 pid)
 {
-    const HWND self = static_cast<HWND>(m_hwnd);
-    const HWND foreground = GetForegroundWindow();
-    if (foreground && foreground != self) {
-        // Sharing the foreground thread's input state lifts the foreground
-        // lock for this call.
-        const DWORD foregroundThread = GetWindowThreadProcessId(foreground, nullptr);
-        const DWORD thread = GetCurrentThreadId();
-        const bool attached = foregroundThread != thread && AttachThreadInput(thread, foregroundThread, TRUE);
-        SetForegroundWindow(self);
-        if (attached)
-            AttachThreadInput(thread, foregroundThread, FALSE);
-    }
+    takeForeground(m_hwnd);
     if (pid && pid != GetCurrentProcessId())
         AllowSetForegroundWindow(pid);
 }
@@ -183,10 +188,13 @@ void ShellLink::disconnect()
     m_workspaces.clear();
     m_activeWorkspace = 0;
     m_wmPid = 0;
+    m_bindings.clear();
+    m_mode.clear();
     emit tasksReset();
     emit activeTaskChanged();
     emit trayReset();
     emit workspacesChanged();
+    emit bindingsChanged();
     emit connectedChanged();
 }
 
@@ -281,6 +289,20 @@ void ShellLink::onMessage(const QByteArray &json)
         m_activeWorkspace = m.value("active").toInt();
         m_wmPid = quint32(m.value("pid").toInteger());
         emit workspacesChanged();
+    } else if (type == "bindings") {
+        m_bindings.clear();
+        for (const QJsonValue &v : m.value("bindings").toArray()) {
+            const QJsonObject o = v.toObject();
+            m_bindings.append({o.value("keys").toString(), o.value("description").toString(),
+                               o.value("dispatcher").toString(), o.value("argument").toString(),
+                               o.value("group").toInt()});
+        }
+        emit bindingsChanged();
+    } else if (type == "visor.command") {
+        emit commandReceived(m.value("name").toString());
+    } else if (type == "shell") {
+        m_mode = m.value("mode").toString();
+        emit connectedChanged();
     } else if (type == "quit") {
         emit quitRequested();
     }

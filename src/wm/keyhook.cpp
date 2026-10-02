@@ -26,6 +26,7 @@ struct HookState
     UINT message = 0;
     QList<KeyHook::Key> keys;
     QSet<DWORD> swallowed; // keys whose key-down we ate: eat their key-up too
+    DWORD alone = 0;       // a release key that is down with nothing pressed since
 };
 HookState *g_state = nullptr;
 
@@ -74,29 +75,74 @@ void maskWinRelease()
     SendInput(2, inputs, sizeof(INPUT));
 }
 
+const KeyHook::Key *find(const HookState *state, DWORD vk, quint32 mods, bool release)
+{
+    for (const KeyHook::Key &key : std::as_const(state->keys)) {
+        if (key.vk == vk && key.modifiers == mods && key.release == release)
+            return &key;
+    }
+    return nullptr;
+}
+
 LRESULT CALLBACK hookProc(int code, WPARAM wParam, LPARAM lParam)
 {
     const auto *event = reinterpret_cast<const KBDLLHOOKSTRUCT *>(lParam);
     HookState *state = g_state;
-    if (code != HC_ACTION || !state || event->dwExtraInfo == kOwnInput || isModifier(event->vkCode))
+    if (code != HC_ACTION || !state || event->dwExtraInfo == kOwnInput)
         return CallNextHookEx(nullptr, code, wParam, lParam);
 
     const DWORD vk = event->vkCode;
     const bool down = wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN;
+    const bool modifier = isModifier(vk);
+
     if (!down) {
+        if (vk == state->alone) {
+            // Released with nothing pressed in between: fire. Modifiers are
+            // passed on so Windows sees them come up; the mask key stops the
+            // Win release from meaning "Start" should Explorer be around.
+            state->alone = 0;
+            if (const KeyHook::Key *key = find(state, vk, currentModifiers(), true)) {
+                if (vk == VK_LWIN || vk == VK_RWIN)
+                    maskWinRelease();
+                PostMessageW(state->target, state->message, WPARAM(key->id), 0);
+            }
+        }
         if (state->swallowed.remove(vk))
             return 1;
         return CallNextHookEx(nullptr, code, wParam, lParam);
     }
 
+    // Any other key pressed while a release key is down cancels it (a
+    // held key auto-repeats; those don't count).
+    if (vk != state->alone && !(state->alone && isDown(int(vk))))
+        state->alone = 0;
     const quint32 mods = currentModifiers();
-    for (const KeyHook::Key &key : std::as_const(state->keys)) {
-        if (key.vk != vk || key.modifiers != mods)
-            continue;
+    if (modifier) {
+        // A modifier counts as "pressed alone" with itself held, e.g. VK_LWIN
+        // with MOD_WIN, which is what its release will report.
+        const quint32 asHeld = mods | (vk == VK_LWIN || vk == VK_RWIN ? MOD_WIN
+                               : vk == VK_LSHIFT || vk == VK_RSHIFT || vk == VK_SHIFT ? MOD_SHIFT
+                               : vk == VK_LCONTROL || vk == VK_RCONTROL || vk == VK_CONTROL ? MOD_CONTROL
+                                                                                            : MOD_ALT);
+        if (!isDown(int(vk)) && find(state, vk, asHeld, true))
+            state->alone = vk;
+        return CallNextHookEx(nullptr, code, wParam, lParam);
+    }
+
+    if (const KeyHook::Key *key = find(state, vk, mods, false)) {
         const bool repeat = state->swallowed.contains(vk);
         state->swallowed.insert(vk);
-        if (!repeat || key.repeat)
-            PostMessageW(state->target, state->message, WPARAM(key.id), 0);
+        if (!repeat || key->repeat)
+            PostMessageW(state->target, state->message, WPARAM(key->id), 0);
+        if (mods & MOD_WIN)
+            maskWinRelease();
+        return 1;
+    }
+    if (find(state, vk, mods, true)) {
+        // A release binding on an ordinary key: swallow it, fire on key-up.
+        if (!state->swallowed.contains(vk))
+            state->alone = vk;
+        state->swallowed.insert(vk);
         if (mods & MOD_WIN)
             maskWinRelease();
         return 1;

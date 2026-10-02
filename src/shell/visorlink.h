@@ -50,7 +50,7 @@ signals:
     void clientDisconnected();
     // Any other message from Visor (e.g. "tray.click").
     void messageReceived(const QJsonObject &message);
-    // A message from visor-wm (desktop state, for Visor).
+    // A message from visor-wm (desktop state, key bindings, a command for Visor).
     void wmMessageReceived(const QJsonObject &message);
 
 private:

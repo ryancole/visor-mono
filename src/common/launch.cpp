@@ -12,8 +12,6 @@
 
 namespace visor {
 
-namespace {
-
 // Launching can block for a long time: activating an app that can't start
 // (e.g. Settings without Explorer) hangs ShellExecuteEx until it times out.
 // Each launch therefore runs on its own short-lived STA thread, so the
@@ -28,11 +26,14 @@ void runDetached(std::function<void()> work)
     }).detach();
 }
 
-bool shellExecuteSync(const QString &file, const QString &parameters)
+namespace {
+
+bool shellExecuteSync(const QString &file, const QString &parameters, bool asAdmin = false)
 {
     SHELLEXECUTEINFOW info{};
     info.cbSize = sizeof(info);
     info.fMask = SEE_MASK_NOASYNC | SEE_MASK_FLAG_NO_UI;
+    info.lpVerb = asAdmin ? L"runas" : nullptr;
     info.lpFile = reinterpret_cast<const wchar_t *>(file.utf16());
     info.lpParameters = parameters.isEmpty() ? nullptr : reinterpret_cast<const wchar_t *>(parameters.utf16());
     info.nShow = SW_SHOWNORMAL;
@@ -46,9 +47,9 @@ bool shellExecuteSync(const QString &file, const QString &parameters)
 
 } // namespace
 
-void shellExecute(const QString &file, const QString &parameters)
+void shellExecute(const QString &file, const QString &parameters, bool asAdmin)
 {
-    runDetached([file, parameters] { shellExecuteSync(file, parameters); });
+    runDetached([file, parameters, asAdmin] { shellExecuteSync(file, parameters, asAdmin); });
 }
 
 void run(const QString &commandLine)

@@ -3,6 +3,7 @@ import QtQuick
 
 QtObject {
     readonly property color background: "#e6141418"
+    readonly property color popupBackground: "#f7141418" // launcher, menus: less see-through
     readonly property color surface: "#26ffffff"
     readonly property color text: "#e8e8ee"
     readonly property color subtext: "#9a9aa8"

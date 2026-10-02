@@ -32,7 +32,7 @@ When `HKCU\...\Winlogon\Shell` names another program, userinit starts that progr
 | Shell hook events | Still work: `RegisterShellHookWindow` is a user32 feature [V] | Shell hook window, plus `SetTaskmanWindow` |
 | ITaskbarList (progress, overlay) | Gone | `TaskbandHWND` property on our tray [V, ManagedShell] |
 | Run, RunOnce, Startup folders | Never run [V] | Our own startup runner |
-| Start menu, search, Widgets | Gone [V/I] | Launcher in Visor |
+| Start menu, search, Widgets | Gone [V] | Launcher in Visor (Phase 4, done) |
 | Win-key hotkeys | Explorer registered most of them, so they go dead. Win+L stays with the system [V] | `RegisterHotKey(MOD_WIN, …)` once Explorer no longer holds them, plus a low-level hook for a bare Win press [I] |
 | Alt+Tab | Switching still works, but **no UI is drawn on 24H2 and later** [V] | Our own switcher (later phase) |
 | Snap and Snap Layouts, Task View, virtual desktops | Live in twinui inside Explorer, so lost [I] | Defer. Rebuild only if needed |
@@ -113,13 +113,17 @@ It reports workspaces and the current layout to Visor through the same `VisorLin
 - **New QML types in Visor:** `SystemTray` (model of icons), `Tasks` (window list with flashing, progress and overlay), `Apps` (launcher index from `FOLDERID_AppsFolder`), and `Shell` (mode, `showDesktop()`, `run()`).
 - **Fallback:** when Visor runs without visor-shell, for example on a normal Explorer session, these types show empty models and nothing else changes.
 
-### Launcher
+### Launcher and menus (Phase 4, done)
 
-The launcher is QML in Visor. The bare Win key opens it.
+The launcher, the power menu and the key-binding cheat sheet are QML in Visor (`Launcher.qml`, `SystemMenu.qml`, `CheatSheet.qml`), built on three things:
 
-- **Index:** `shell:AppsFolder` (Start Menu shortcuts plus packaged apps), read lazily and refreshed when those folders change.
-- **Launching:** through `IShellItem` / `ShellExecuteEx`.
-- **Packaged apps:** in replace mode they are listed only once Phase 0 shows they launch.
+- **Keys.** Windows' own where it has one: a bare Win press or Win+S for the launcher, Win+X for the power menu, Win+R for Run; Omarchy's Super+K for the cheat sheet. All are `bind` lines in `wm.conf` with the `visor` dispatcher (`bindd = SUPER, X, System menu, visor, menu`), so visor-wm sends `{"type":"visor.command","name":"menu"}` to the shell, which forwards it to Visor, where `shell.qml` decides what each name opens. The bare Win press is `bindr = SUPER, SUPER_L, ...` (Hyprland's syntax): a release binding in the keyboard hook, cancelled by any other key, so Win+anything is unaffected. Win+Space stays Windows' layout switcher. visor-wm also sends its `bindd` descriptions (`{"type":"bindings"}`) for the cheat sheet; the shell caches both this and the desktop state and re-sends them when Visor reconnects.
+- **A window that takes focus.** `PopupWindow` (a QML type next to `PanelWindow`): frameless, topmost, no taskbar button, DWM rounded corners. Visor's bars are `WS_EX_NOACTIVATE`, so a key in visor-wm or a click on the bar gives Visor no foreground rights; `open()` takes the foreground the way tray clicks already do (attach to the foreground thread's input, `SetForegroundWindow`), then activates. It closes on Escape or when focus goes elsewhere, and gives focus back to the window it took it from. It opens on the monitor of the focused window, or the bar's when clicked.
+- **The app index.** `AppIndex` (process-wide, survives config reloads) enumerates `FOLDERID_AppsFolder` through `IShellItem` on a worker thread, three seconds after start, and again when either Start Menu folder changes (`FindFirstChangeNotification`) or a package is installed, updated or removed (`PackageCatalog`). Each app keeps its PIDL; icons come from `IShellItemImageFactory` through an `image://visor-app-icon/` provider, drawn only for visible rows. The `Apps` QML model filters and ranks it (fuzzy match rewarding prefixes, word starts and runs; recently launched apps first for an empty query; launch history in `%APPDATA%\visor\apps.ini`). Every launch runs on its own thread.
+
+**Packaged apps in replace mode.** Launching an AppsFolder item (`ShellExecuteEx` with its PIDL, or `shell:AppsFolder\<id>`) fails with `REGDB_E_CLASSNOTREG` for every packaged app when Explorer isn't the shell, though it works for shortcuts. Full-trust packaged apps (Terminal, Store Notepad) run fine as processes, so the index reads each packaged app's `AppxManifest.xml` and records how to start it without the shell: its execution alias (`%LOCALAPPDATA%\Microsoft\WindowsApps\<family>\wt.exe`, which gives it its package identity), or the executable of a full-trust (`Windows.FullTrustApplication` / `packagedClassicApp`) app. UWP apps (Settings, Calculator) get nothing: they're listed dimmed as "Needs Explorer", after the launchable results, rather than hidden, so a search for "settings" doesn't look broken (Control Panel is the usable alternative). The shell tells Visor its mode (`{"type":"shell","mode":"replace"}`) when it connects; under Explorer every app launches through the shell.
+
+The power menu's actions run in Visor (`LockWorkStation`, `ExitWindowsEx` with `SE_SHUTDOWN_NAME`, `SetSuspendState`); "Quit to Explorer" sends `{"type":"shell.quit"}` to the shell, the same path as Ctrl+Alt+Q. Win+R shows shell32's Run dialog from Visor, after taking the foreground.
 
 ## 5. Safety and test environment
 
@@ -173,11 +177,11 @@ Session work runs alongside Phases 2–3:
 - A `Workspaces` QML type in Visor.
 - Float rules for dialogs and tool windows.
 
-**Phase 4: launcher and menu.**
-- `Apps` index and the launcher UI (Super+Space).
-- A system/power menu.
-- A keybinding cheat sheet.
-- A Run box and Win+E.
+**Phase 4: launcher and menu.** Done; see §4 "Launcher and menus".
+- `Apps` index and the launcher UI (a bare Win press, or Win+S).
+- A system/power menu (Win+X).
+- A keybinding cheat sheet (Super+K).
+- Win+R opens the Run dialog; Win+E was already in `wm.conf`.
 
 **Phase 5: theming.**
 - One theme file drives Visor QML, the wallpaper, Windows dark mode and accent, and the Windows Terminal scheme.
@@ -189,7 +193,7 @@ Session work runs alongside Phases 2–3:
 
 **Phase 7: gaps, guided by Phase 0.**
 - An Alt+Tab switcher with DWM thumbnails.
-- A packaged-app strategy, or a decision that hosted mode is the answer for users who need Settings and Store apps.
+- A packaged-app strategy for UWP apps (full-trust packaged apps launch, see Phase 4), or a decision that hosted mode is the answer for users who need Settings and Store apps.
 
 ## 7. Prior art to read while building
 

@@ -32,6 +32,7 @@ Fill in each result as ✅ works, ❌ broken, or ⚠️ partly works, and add no
 | Settings app | Run → `ms-settings:` | ❌ | No window and no SystemSettings process. The launch blocked the shell's input for a while, then gave up |
 | Store app (Calculator) | Run → `calc` | ❌ | `CalculatorApp.exe` starts but never gets a window: UWP/CoreWindow apps have no immersive shell to host them |
 | Windows Terminal (packaged) | Ctrl+Alt+T | ✅ | Full-trust packaged app; `wt.exe` alias works |
+| Packaged apps through the shell (`shell:AppsFolder\<id>`, or the item's PIDL) | Phase 4 launcher | ❌ | `REGDB_E_CLASSNOTREG` for every packaged app, full-trust ones included; shortcuts launch fine. The launcher runs full-trust packaged apps by their execution alias or executable instead (see design.md §4) |
 | Edge | Run → `msedge` | ✅ | |
 | Toast notification | `New-BurntToastNotification`, or any app's toast | | |
 | Alt+Tab shows a switcher | Alt+Tab with 2+ windows open | ⚠️ | Switching works (focus moved from Explorer to Terminal), but nothing is drawn. Not checked while holding Alt |

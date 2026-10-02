@@ -13,6 +13,12 @@ namespace visor::wm {
 // so Windows never acts on them, and reported by posting `message` (wParam =
 // the key's id) to `target`.
 //
+// Release keys fire when the key comes up, and only if no other key was
+// pressed while it was down. That's how a bare Win press (key VK_LWIN with
+// MOD_WIN, as Win is still down when it is released) opens the launcher
+// without getting in the way of Win+anything. Modifier keys are never
+// swallowed, so Windows keeps its own view of what is held.
+//
 // The hook runs on its own thread: Windows silently removes a low-level hook
 // whose thread is slow to answer, and visor-wm's main thread may be busy.
 // Like any non-elevated hook it gets no keys while an elevated window (e.g.
@@ -25,6 +31,7 @@ public:
         quint32 modifiers = 0; // MOD_ALT | MOD_CONTROL | MOD_SHIFT | MOD_WIN
         quint32 vk = 0;
         bool repeat = false;   // report auto-repeats too
+        bool release = false;  // report on key-up, if pressed alone
         int id = 0;
     };
 

@@ -47,6 +47,16 @@ public:
         int windows = 0;
     };
 
+    // One of visor-wm's key bindings, as it describes it.
+    struct Binding
+    {
+        QString keys; // "SUPER+Return"
+        QString description;
+        QString dispatcher;
+        QString argument;
+        int group = 0;
+    };
+
     explicit ShellLink(QObject *parent = nullptr);
     ~ShellLink() override;
 
@@ -54,12 +64,15 @@ public:
     static ShellLink *instance();
 
     bool connected() const { return m_shell != nullptr; }
+    // "replace" or "hosted" (how visor-shell runs), empty when not connected.
+    QString mode() const { return m_mode; }
     const QList<Task> &tasks() const { return m_tasks; }
     quintptr activeTask() const { return m_active; }
     const QList<TrayIcon> &trayIcons() const { return m_trayIcons; }
     const QList<Workspace> &workspaces() const { return m_workspaces; }
     int activeWorkspace() const { return m_activeWorkspace; }
     quint32 wmPid() const { return m_wmPid; } // visor-wm, which switches desktops
+    const QList<Binding> &bindings() const { return m_bindings; }
 
     // Sends a message to visor-shell; dropped when not connected.
     void send(const QJsonObject &message);
@@ -70,6 +83,9 @@ public:
     // foreground with its hidden link window, then passes the rights on.
     // Call only in response to a user click.
     void grantForeground(quint32 pid);
+    // Brings `hwnd` (one of ours) to the foreground, as grantForeground does
+    // for the link window. Call only in response to a key press or click.
+    static void takeForeground(void *hwnd);
 
     // Window procedure hook; returns true if the message was handled.
     bool handleMessage(unsigned msg, unsigned long long wParam, long long lParam);
@@ -86,6 +102,9 @@ signals:
     void trayIconChanged(const ShellLink::TrayIcon &icon);
     void trayIconRemoved(int id);
     void workspacesChanged();
+    void bindingsChanged();
+    // A `visor` key binding in visor-wm was pressed, e.g. "launcher".
+    void commandReceived(const QString &name);
     // visor-shell is handing the session to Explorer.
     void quitRequested();
 
@@ -104,4 +123,6 @@ private:
     QList<Workspace> m_workspaces;
     int m_activeWorkspace = 0;
     quint32 m_wmPid = 0;
+    QList<Binding> m_bindings;
+    QString m_mode;
 };

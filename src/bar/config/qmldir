@@ -5,3 +5,6 @@ Icon 1.0 Icon.qml
 TaskList 1.0 TaskList.qml
 TrayArea 1.0 TrayArea.qml
 Desktops 1.0 Desktops.qml
+Launcher 1.0 Launcher.qml
+SystemMenu 1.0 SystemMenu.qml
+CheatSheet 1.0 CheatSheet.qml

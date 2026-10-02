@@ -1,6 +1,6 @@
 # visor
 
-A lightweight status bar for Windows, configured in QML. Inspired by
+A lightweight status bar for Windows, with a launcher and menus, configured in QML. Inspired by
 [Quickshell](https://quickshell.org): declarative layout, reactive bindings to
 system data, and live reload, without a browser engine.
 
@@ -49,6 +49,7 @@ config can put them in the bar itself.
 | `Visor` | singleton | visor itself: `version`, `configPath`, `renderer` (`Visor.Cpu`/`Visor.Gpu`, writable: saves and restarts), `activeRenderer`, `reload()`, `restart()`, `quit()`, `openConfigFolder()`. |
 | `ShellRoot` | element | Non-visual root that holds windows, `Instantiator`s, etc. |
 | `PanelWindow` | element | Window docked to a monitor edge. `edge`, `thickness`, `screen`, `exclusive` (reserve space like the taskbar), `hideOnFullscreen`, `fullscreenAppActive`. |
+| `PopupWindow` | element | A pop-up that takes keyboard focus (the launcher, menus): frameless, topmost, rounded. `open(screen?)` activates it on the focused window's monitor (or `screen`), `close()`, `toggle(screen?)`; `placement` (`Below` the bar centred, `BelowLeft`, `Center`), `margin`, `closeOnDeactivate`. Closes on Esc and when focus goes elsewhere; signals `opened`, `closed`. |
 | `SystemClock` | element | `date`, `hours`, `minutes`, `seconds`; wakes only on `precision` boundaries (`Seconds`/`Minutes`/`Hours`). |
 | `ActiveWindow` | singleton | Focused window: `title`, `appName`, `processPath`, `processId`, `className`. |
 | `Audio` | singleton | Default output device: `volume` (0–1, writable), `muted` (writable), `deviceName`, `toggleMute()`. |
@@ -56,6 +57,9 @@ config can put them in the bar itself.
 | `SystemTray` | singleton model | Notification-area icons, hosted by [visor-shell](../shell) (empty without it). Roles: `iconId`, `tooltip`, `icon`, `processId`. `click(iconId, button)` with `"left"`, `"right"`, `"middle"` or `"double"` forwards the click to the app. |
 | `Workspaces` | singleton model | Virtual desktops, from [visor-wm](../wm) (empty without it; `available` says which). Roles: `name` ("Desktop 1"), `active`, `windows`. Properties `count`, `active` (index). `activate(index)`, `next()`, `previous()`. The default config's `Desktops.qml` shows them once there are two or more. |
 | `Tasks` | singleton model | Open app windows, from [visor-shell](../shell) (empty without it; `available` says which). Roles: `hwnd`, `title`, `appName`, `processPath`, `active`, `flashing`, `icon` (an `image://` URL). `activate(hwnd)` (focus, or minimise if focused), `minimize(hwnd)`, `close(hwnd)`. |
+| `Apps` | singleton model | The installed apps (`shell:AppsFolder`) matching `query`, best first; recently opened first for an empty query. Roles: `key`, `name`, `id`, `icon` (an `image://` URL), `packaged`, `launchable` (false for UWP apps in replace mode), `recent`. `launch(row, asAdmin = false)`, `refresh()`, `ready`, `count`. |
+| `KeyBindings` | singleton model | visor-wm's key bindings, for a cheat sheet (empty without it). Roles: `keys` ("SUPER+Return"), `label` ("Win + Enter"), `description`, `dispatcher`, `argument`, `group`. `groupCount`, `group(n)` (the n-th group as `{label, description}` objects). |
+| `Shell` | singleton | The session: `available`, `mode` (`"replace"`, `"hosted"` or `""`), `replacingExplorer`; signal `command(name)` for the `visor` key bindings in `wm.conf`; `run(commandLine)`, `showRunDialog()`, `lock()`, `signOut()`, `sleep()`, `restart()`, `shutDown()`, `quitToExplorer()`. |
 
 One bar per monitor:
 
@@ -83,6 +87,8 @@ ShellRoot {
     }
 }
 ```
+
+The default config adds `Launcher.qml`, `SystemMenu.qml` and `CheatSheet.qml` (each a `PopupWindow`), opened from `shell.qml` when `Shell.command` names them (`launcher`, `menu`, `keys`; `run` shows the Run dialog) and from the button at the left of `Bar.qml`.
 
 ## Layout
 

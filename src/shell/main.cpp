@@ -194,6 +194,19 @@ int main(int argc, char *argv[])
             link.send({{QStringLiteral("type"), QStringLiteral("tray.removed")}, {QStringLiteral("id"), id}});
         });
     }
+    // Ctrl+Alt+Q, or Visor's menu: hand the session to Explorer.
+    const auto quitToExplorer = [&] {
+        qInfo() << "quit requested";
+        if (mode == Mode::Replace) {
+            link.stopVisor();
+            // Shows windows hidden on other desktops before Explorer comes.
+            link.sendToWm({{QStringLiteral("type"), QStringLiteral("quit")}});
+        }
+        // As the shell, ask visor-session to hand over to Explorer.
+        // Hosted, Explorer is already there: just exit.
+        QCoreApplication::exit(mode == Mode::Replace ? visor::exitcode::StartExplorer : 0);
+    };
+
     QObject::connect(&link, &visor::VisorLink::messageReceived, &app, [&](const QJsonObject &m) {
         const QString type = m.value(QStringLiteral("type")).toString();
         if (tray && type == QLatin1String("tray.click")) {
@@ -201,18 +214,31 @@ int main(int argc, char *argv[])
                         m.value(QStringLiteral("x")).toInt(), m.value(QStringLiteral("y")).toInt());
         } else if (type == QLatin1String("workspace.activate")) {
             link.sendToWm(m);
+        } else if (type == QLatin1String("shell.quit")) {
+            quitToExplorer();
         }
     });
 
-    // visor-wm's desktops, passed on to Visor; the latest is re-sent when
-    // Visor (re)connects.
+    // visor-wm's desktops and key bindings, passed on to Visor; the latest
+    // of each is re-sent when Visor (re)connects. Its commands for Visor
+    // (open the launcher, ...) just go through.
     QJsonObject desktops;
+    QJsonObject bindings;
     QObject::connect(&link, &visor::VisorLink::wmMessageReceived, &app, [&](const QJsonObject &m) {
-        desktops = m;
+        const QString type = m.value(QStringLiteral("type")).toString();
+        if (type == QLatin1String("workspaces"))
+            desktops = m;
+        else if (type == QLatin1String("bindings"))
+            bindings = m;
         link.send(m);
     });
 
     QObject::connect(&link, &visor::VisorLink::clientConnected, &app, [&] {
+        // First, so Visor knows what it is running under (packaged apps
+        // only launch with Explorer around).
+        link.send({{QStringLiteral("type"), QStringLiteral("shell")},
+                   {QStringLiteral("mode"), mode == Mode::Replace ? QStringLiteral("replace")
+                                                                   : QStringLiteral("hosted")}});
         QJsonArray list;
         for (const visor::Tasks::Task &t : tasks.tasks())
             list.append(toJson(t));
@@ -227,6 +253,8 @@ int main(int argc, char *argv[])
         }
         if (!desktops.isEmpty())
             link.send(desktops);
+        if (!bindings.isEmpty())
+            link.send(bindings);
         if (mode == Mode::Replace)
             minimized.setHidden(true);
     });
@@ -257,9 +285,11 @@ int main(int argc, char *argv[])
         // Until a restarted visor-wm reports in, there are no desktops.
         QObject::connect(windowManager.get(), &visor::Supervisor::exited, &app, [&] {
             desktops = {};
+            bindings = {};
             link.send({{QStringLiteral("type"), QStringLiteral("workspaces")},
                        {QStringLiteral("workspaces"), QJsonArray()},
                        {QStringLiteral("active"), 0}});
+            link.send({{QStringLiteral("type"), QStringLiteral("bindings")}, {QStringLiteral("bindings"), QJsonArray()}});
         });
         windowManager->start();
     }
@@ -280,15 +310,7 @@ int main(int argc, char *argv[])
                 visor::showRunDialog();
                 break;
             case visor::Hotkeys::QuitToExplorer:
-                qInfo() << "quit requested";
-                if (mode == Mode::Replace) {
-                    link.stopVisor();
-                    // Shows windows hidden on other desktops before Explorer comes.
-                    link.sendToWm({{QStringLiteral("type"), QStringLiteral("quit")}});
-                }
-                // As the shell, ask visor-session to hand over to Explorer.
-                // Hosted, Explorer is already there: just exit.
-                QCoreApplication::exit(mode == Mode::Replace ? visor::exitcode::StartExplorer : 0);
+                quitToExplorer();
                 break;
             }
         },

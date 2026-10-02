@@ -137,6 +137,9 @@ private:
     void restoreState();
     QJsonObject desktopState() const;
     void sendState();
+    // The key bindings, for Visor's cheat sheet (linkprotocol.h).
+    void sendBindings();
+    void sendToShell(const QJsonObject &message);
 
     void registerBindings();
     void unregisterBindings();

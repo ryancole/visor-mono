@@ -8,6 +8,7 @@
 
 #include <memory>
 
+class AppIndex;
 class ShellLink;
 class TrayIcon;
 
@@ -52,4 +53,5 @@ private:
     Shell m_shell;
     std::unique_ptr<TrayIcon> m_tray;
     std::unique_ptr<ShellLink> m_shellLink;
+    std::unique_ptr<AppIndex> m_apps;
 };

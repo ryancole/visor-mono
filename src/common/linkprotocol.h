@@ -17,7 +17,9 @@
 //   {"type":"hello","version":"..."}
 //   {"type":"tray.click","id":n,"button":"left"|"right"|"middle"|"double","x":n,"y":n}
 //                                               (screen position, physical px)
+//   {"type":"shell.quit"}                       (hand the session to Explorer)
 // Shell -> Visor:
+//   {"type":"shell","mode":"replace"|"hosted"}  (first, after hello)
 //   {"type":"tasks.reset","tasks":[Task...],"active":hwnd}
 //   {"type":"task.added","task":Task}
 //   {"type":"task.changed","task":Task}
@@ -29,16 +31,20 @@
 //   {"type":"tray.removed","id":n}
 //   {"type":"quit"}                             (handing the session to Explorer)
 //
-// Desktops (virtual desktops, run by visor-wm). visor-wm sends its state to
-// the shell's link window; the shell forwards it to Visor, re-sends the last
-// one when Visor (re)connects, and sends an empty list when visor-wm exits.
-// Visor's requests go the other way, to visor-wm's window (class kWmClass).
+// visor-wm sends to the shell's link window; the shell forwards to Visor,
+// re-sends the last "workspaces" and "bindings" when Visor (re)connects, and
+// sends empty ones when visor-wm exits. Visor's requests go the other way,
+// to visor-wm's window (class kWmClass).
 //   visor-wm -> shell -> Visor:
 //     {"type":"workspaces","workspaces":[Desktop...],"active":index,"pid":n}
+//     {"type":"bindings","bindings":[Binding...]}   (the key bindings, for the cheat sheet)
+//     {"type":"visor.command","name":"launcher"}    (a `visor` binding was pressed)
 //   Visor -> shell -> visor-wm:
 //     {"type":"workspace.activate","index":n}
 // Desktop = {"name":"Desktop 1","windows":n}; pid is visor-wm's, so Visor
 // can let it take the foreground when the user clicks a desktop.
+// Binding = {"keys":"SUPER+Return","description":"Terminal","dispatcher":"exec",
+//            "argument":"wt.exe","group":n}
 //
 // Task = {"hwnd":n,"title":"...","pid":n,"path":"...","flashing":bool}
 // TrayIcon = {"id":n,"pid":n,"tip":"...","icon":hicon,"hidden":bool}

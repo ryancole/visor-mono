@@ -182,6 +182,8 @@ bool parseKey(const QString &text, quint32 *out)
         {QStringLiteral("grave"), VK_OEM_3},        {QStringLiteral("semicolon"), VK_OEM_1},
         {QStringLiteral("apostrophe"), VK_OEM_7},   {QStringLiteral("bracketleft"), VK_OEM_4},
         {QStringLiteral("bracketright"), VK_OEM_6}, {QStringLiteral("backslash"), VK_OEM_5},
+        {QStringLiteral("super_l"), VK_LWIN},       {QStringLiteral("super_r"), VK_RWIN},
+        {QStringLiteral("super"), VK_LWIN},
     };
     const auto it = names.constFind(key);
     if (it == names.cend())
@@ -203,17 +205,19 @@ bool isInt(const QString &s)
     return ok;
 }
 
-// `flags` is what follows "bind" in the key: d (description), e (repeat).
+// `flags` is what follows "bind" in the key: d (description), e (repeat),
+// r (release).
 bool parseBinding(const QString &flags, const QString &value, Binding *binding, QString *error)
 {
     for (QChar f : flags) {
-        if (f != QLatin1Char('d') && f != QLatin1Char('e')) {
-            *error = QStringLiteral("unsupported bind flag '%1' (supported: d, e)").arg(f);
+        if (f != QLatin1Char('d') && f != QLatin1Char('e') && f != QLatin1Char('r')) {
+            *error = QStringLiteral("unsupported bind flag '%1' (supported: d, e, r)").arg(f);
             return false;
         }
     }
     const bool described = flags.contains(QLatin1Char('d'));
     binding->repeat = flags.contains(QLatin1Char('e'));
+    binding->release = flags.contains(QLatin1Char('r'));
 
     // The argument is everything after the dispatcher, commas included
     // (exec command lines may contain them).
@@ -247,7 +251,7 @@ bool parseBinding(const QString &flags, const QString &value, Binding *binding, 
     const QString &d = binding->dispatcher;
     const QString arg = argument.toLower();
     bool ok = true;
-    if (d == QLatin1String("exec")) {
+    if (d == QLatin1String("exec") || d == QLatin1String("visor")) {
         ok = !argument.isEmpty();
     } else if (d == QLatin1String("killactive") || d == QLatin1String("togglefloating")
                || d == QLatin1String("togglesplit")) {
@@ -291,6 +295,8 @@ Config Config::parse(const QString &text)
     Config config;
     QHash<QString, QString> variables;
     QStringList sections;
+    int group = 0;
+    bool inGroup = false; // the previous line was a binding
 
     const QStringList lines = text.split(QLatin1Char('\n'));
     for (qsizetype n = 0; n < lines.size(); ++n) {
@@ -314,8 +320,13 @@ Config Config::parse(const QString &text)
             line += raw[i];
         }
         line = line.trimmed();
-        if (line.isEmpty())
+        if (line.isEmpty()) {
+            // A gap after some bindings starts a new group.
+            if (inGroup)
+                ++group;
+            inGroup = false;
             continue;
+        }
 
         if (line == QLatin1String("}")) {
             if (sections.isEmpty())
@@ -373,6 +384,8 @@ Config Config::parse(const QString &text)
         } else if (key.startsWith(QLatin1String("bind"))) {
             Binding binding;
             QString error;
+            binding.group = group;
+            inGroup = true;
             if (parseBinding(key.mid(4), value, &binding, &error))
                 config.bindings.append(binding);
             else

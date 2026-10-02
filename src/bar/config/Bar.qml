@@ -4,6 +4,10 @@ import Visor
 PanelWindow {
     id: bar
 
+    // The pop-ups the launcher button opens (set by shell.qml).
+    property PopupWindow launcherPopup
+    property PopupWindow menuPopup
+
     edge: PanelWindow.Top
     thickness: Theme.barHeight
     color: Theme.background
@@ -22,6 +26,36 @@ PanelWindow {
         anchors.verticalCenter: parent.verticalCenter
         width: Math.max(0, center.x - x - 24)
         spacing: 8
+
+        // Like Start: left-click for the launcher, right-click for the
+        // power menu (Win+X).
+        Rectangle {
+            anchors.verticalCenter: parent.verticalCenter
+            width: 28
+            height: 24
+            radius: 6
+            color: launcherMouse.containsMouse ? Theme.surface : "transparent"
+
+            Icon {
+                anchors.centerIn: parent
+                glyph: "" // AllApps
+                color: Theme.accent
+                font.pixelSize: 16
+            }
+
+            MouseArea {
+                id: launcherMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                acceptedButtons: Qt.LeftButton | Qt.RightButton
+                onClicked: mouse => {
+                    const popup = mouse.button === Qt.RightButton ? bar.menuPopup : bar.launcherPopup
+                    if (popup)
+                        popup.toggle(bar.screen)
+                }
+            }
+        }
 
         Desktops {
             anchors.verticalCenter: parent.verticalCenter

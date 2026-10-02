@@ -1,5 +1,6 @@
 #include "shell.h"
 
+#include "services/apps.h"
 #include "services/windowicons.h"
 
 #include <QCoreApplication>
@@ -65,6 +66,7 @@ void Shell::load()
     next->engine->addImportPath(m_configDir);
     next->engine->addImageProvider(QStringLiteral("visor-window-icon"), new WindowIconProvider);
     next->engine->addImageProvider(QStringLiteral("visor-tray-icon"), new TrayIconProvider);
+    next->engine->addImageProvider(QStringLiteral("visor-app-icon"), new AppIconProvider);
     connect(next->engine.get(), &QQmlEngine::quit, QCoreApplication::instance(), &QCoreApplication::quit,
             Qt::QueuedConnection);
     connect(next->engine.get(), &QQmlEngine::exit, QCoreApplication::instance(), &QCoreApplication::exit,

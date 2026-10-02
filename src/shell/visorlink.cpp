@@ -225,12 +225,11 @@ std::intptr_t VisorLink::handleMessage(void *window, unsigned msg, std::uintptr_
         QJsonDocument::fromJson(QByteArray(static_cast<const char *>(cds->lpData), int(cds->cbData))).object();
     const QString type = message.value(QStringLiteral("type")).toString();
 
-    // visor-wm's desktop state, for Visor (linkprotocol.h).
-    if (type == QLatin1String("workspaces")) {
-        wchar_t cls[32] = {};
-        GetClassNameW(reinterpret_cast<HWND>(wParam), cls, int(std::size(cls)));
-        if (wcscmp(cls, link::kWmClass) != 0)
-            return FALSE;
+    // From visor-wm (desktop state, key bindings, commands for Visor), see
+    // linkprotocol.h. Anything from its window is passed on.
+    wchar_t cls[32] = {};
+    GetClassNameW(reinterpret_cast<HWND>(wParam), cls, int(std::size(cls)));
+    if (wcscmp(cls, link::kWmClass) == 0) {
         QMetaObject::invokeMethod(this, [this, message] { emit wmMessageReceived(message); }, Qt::QueuedConnection);
         return TRUE;
     }

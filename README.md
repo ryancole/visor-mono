@@ -5,12 +5,12 @@ Omarchy-style desktop: tiling, keyboard-driven, themeable. Native C++ and Qt,
 event-driven, small. It can run as a plain app under Explorer, or replace
 `explorer.exe` as the Windows shell.
 
-Status: **phase 3d**: Hyprland-style tiling, key bindings and Windows-style virtual desktops (`visor-wm`) on top of phase 2's desktop, wallpaper, task list and tray in Visor, app bars and work areas, fullscreen detection and Visor supervision. Phase 0 results (what breaks without Explorer) are in [docs/phase0-compat.md](docs/phase0-compat.md).
+Status: **phase 4**: the app launcher, power menu and key-binding cheat sheet in Visor, on top of phase 3's Hyprland-style tiling, key bindings and Windows-style virtual desktops (`visor-wm`) and phase 2's desktop, wallpaper, task list and tray, app bars and work areas, fullscreen detection and Visor supervision. Phase 0 results (what breaks without Explorer) are in [docs/phase0-compat.md](docs/phase0-compat.md).
 See [docs/design.md](docs/design.md) for the architecture and plan.
 
 | Program | Source | What it is |
 | --- | --- | --- |
-| `visor.exe` | [`src/bar`](src/bar) | The status bar, configured in QML (live reload). It draws all of the UI. It works on its own under Explorer; with visor-shell it also shows tasks and the tray. See [src/bar/README.md](src/bar/README.md) for config and the QML API. |
+| `visor.exe` | [`src/bar`](src/bar) | The status bar, launcher and menus, configured in QML (live reload). It draws all of the UI. It works on its own under Explorer; with visor-shell it also shows tasks and the tray. See [src/bar/README.md](src/bar/README.md) for config and the QML API. |
 | `visor-session.exe` | [`src/session`](src/session) | What Windows starts at sign-in. Plain Win32, static CRT, no Qt. Starts `visor-shell`, restarts it after a crash, and falls back to Explorer when it can't run. |
 | `visor-shell.exe` | [`src/shell`](src/shell) | Shell services: desktop and wallpaper, the shell-ready signal, hotkeys, window (task) tracking, the notification area (`Shell_TrayWnd`), the app bar server, and starting and supervising Visor and visor-wm. Draws no UI of its own. Visor does that, over the link in [`src/common/linkprotocol.h`](src/common/linkprotocol.h). |
 | `visor-wm.exe` | [`src/wm`](src/wm) | The tiling window manager, in Hyprland's role: tiles app windows with the dwindle layout inside the space Visor's bar leaves. Configured by a `hyprland.conf`-style `wm.conf`. See [Window manager](#window-manager). |
@@ -33,7 +33,7 @@ If sign-in lands on a black or broken desktop, try these in order:
 6. **Edit the registry by hand.** Delete the `Shell` value under `HKCU\Software\Microsoft\Windows NT\CurrentVersion\Winlogon`. The machine-wide `HKLM` value is never touched.
 7. **Revert the VM** to its `clean` checkpoint.
 
-Logs are in `%LOCALAPPDATA%\visor-shell\logs\` (`session.log`, `shell.log`, `wm.log`). Windows hidden on other desktops are listed in `%LOCALAPPDATA%\visor-shell\wm-hidden.txt` while `visor-wm` runs.
+Logs are in `%LOCALAPPDATA%\visor-shell\logs\` (`session.log`, `shell.log`, `wm.log`, and `visor.log` when Visor isn't run from a terminal). Windows hidden on other desktops are listed in `%LOCALAPPDATA%\visor-shell\wm-hidden.txt` while `visor-wm` runs.
 
 ## Building
 
@@ -85,6 +85,22 @@ pwsh etc/vm/input.ps1 -Key ctrl+alt+r     # press keys inside the VM
 
 `screenshot.ps1` and `input.ps1` work through Hyper-V and PowerShell Direct, so they need no VM window or focus on the host. Note that Windows 11 opens console programs in Windows Terminal, which takes the foreground. The input helper runs under `conhost --headless` so it doesn't disturb what it is testing.
 
+## Launcher and menus
+
+These are QML in Visor ([`src/bar/config`](src/bar/config): `Launcher.qml`, `SystemMenu.qml`, `CheatSheet.qml`), opened by key bindings in `wm.conf` that visor-wm passes to Visor (`bindd = SUPER, S, Launcher, visor, launcher`), or from the button at the left of the bar.
+
+| Keys | Action |
+| --- | --- |
+| Win (pressed alone), Win+S, or click the bar's button | The launcher |
+| Win+X, or right-click the button | The power menu: lock, sign out, sleep, restart, shut down, quit to Explorer |
+| Super+K | The key-binding cheat sheet |
+| Win+R | The Run dialog |
+
+- **Launcher:** lists what the Start menu would (`shell:AppsFolder`: Start Menu shortcuts and packaged apps), indexed in the background and refreshed when a Start Menu folder or a package changes. Type to search (fuzzy: `wt` finds Windows Terminal); Up/Down pick, Enter opens, Ctrl+Shift+Enter opens as administrator, Esc closes. With nothing typed, recently opened apps come first. If nothing matches, Enter runs what you typed as a command. Launches run on their own threads, so one that hangs blocks nothing.
+- **Packaged apps in replace mode:** without Explorer, Windows can't start packaged apps through the shell ("class not registered"). Those that run as ordinary processes (Terminal, Store Notepad, Paint) are started through their execution alias or executable instead, found in their manifest. UWP apps (Settings, Calculator, Clock) couldn't show a window anyway; they're listed dimmed as "Needs Explorer", after everything else. Under Explorer everything launches normally.
+- The bare Win press uses visor-wm's keyboard hook, so like the hooked keys below it doesn't work while an app running as administrator has focus; Win+S does. Win+Space is left alone: Windows uses it to switch keyboard layouts.
+- Pop-ups open on the monitor of the focused window, under the bar (the cheat sheet in the middle), and close when focus goes elsewhere.
+
 ## Window manager
 
 `visor-wm` tiles windows the way Hyprland does in Omarchy. visor-shell starts it in replace mode and restarts it if it crashes. Under Explorer it never starts by itself: run `visor-wm.exe` by hand to try tiling. It has no window, so stop it from Task Manager; your windows stay where they are.
@@ -105,6 +121,7 @@ The default bindings follow Omarchy. They are all `bind` lines in `wm.conf`, in 
 
 | Keys | Action |
 | --- | --- |
+| Win, Super+S, Super+X, Super+K, Super+R | Launcher, power menu, cheat sheet, Run (see [Launcher and menus](#launcher-and-menus)) |
 | Super+Return | Terminal (`wt.exe`) |
 | Super+E | File Explorer |
 | Super+W | Close the window |
@@ -116,7 +133,7 @@ The default bindings follow Omarchy. They are all `bind` lines in `wm.conf`, in 
 | Super+Shift+arrows | Swap the window with its neighbour |
 | Super+minus / equal | Narrower / wider (add Shift for shorter / taller) |
 
-Windows reserves some Win-key combinations even without Explorer (Win+arrows, Win+Shift+arrows, Win+Return, Win+=), so `visor-wm` catches those with a keyboard hook instead of a hotkey. One limit comes with that: they don't work while an app running as administrator has focus. Win+L always locks the screen.
+Windows reserves some Win-key combinations even without Explorer (Win+arrows, Win+Shift+arrows, Win+Return, Win+=), so `visor-wm` catches those with a keyboard hook instead of a hotkey, as it does the bare Win press (`bindr = SUPER, SUPER_L, ...`: fires on release, if nothing else was pressed). One limit comes with that: they don't work while an app running as administrator has focus. Win+L always locks the screen.
 
 ### Desktops
 
@@ -137,6 +154,8 @@ Windows 11's virtual desktops live in Explorer, so they're gone in replace mode.
 
 
 ## Phase 0 hotkeys
+
+visor-shell's own, which work even when visor-wm is down:
 
 | Keys | Action |
 | --- | --- |

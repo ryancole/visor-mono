@@ -1,5 +1,7 @@
 #include "app.h"
 
+#include "common/log.h"
+
 #include <QCommandLineParser>
 #include <QDir>
 #include <QFileInfo>
@@ -14,17 +16,19 @@ namespace {
 
 // visor is a GUI-subsystem app, so it has no console of its own. When launched
 // from a terminal, attach to it so qDebug/QML warnings show up there.
-void attachParentConsole()
+// Returns false when there is nowhere to print (started by visor-shell).
+bool attachParentConsole()
 {
     // Leave already-redirected output (pipes, files) alone.
     const HANDLE err = GetStdHandle(STD_ERROR_HANDLE);
     if (err && err != INVALID_HANDLE_VALUE)
-        return;
+        return true;
     if (!AttachConsole(ATTACH_PARENT_PROCESS))
-        return;
+        return false;
     FILE *f = nullptr;
     freopen_s(&f, "CONOUT$", "w", stdout);
     freopen_s(&f, "CONOUT$", "w", stderr);
+    return true;
 }
 
 // Config lookup order: --config, %VISOR_CONFIG%, ~/.config/visor/shell.qml,
@@ -55,7 +59,8 @@ QString resolveConfig(const QString &explicitPath)
 
 int main(int argc, char *argv[])
 {
-    attachParentConsole();
+    if (!attachParentConsole())
+        visor::installLogHandler(QStringLiteral("visor")); // %LOCALAPPDATA%\visor-shell\logs\visor.log
 
     QGuiApplication app(argc, argv);
     QGuiApplication::setApplicationName("visor");

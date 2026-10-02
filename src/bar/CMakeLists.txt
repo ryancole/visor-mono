@@ -9,6 +9,9 @@ qt_add_executable(visor WIN32
     tray.h tray.cpp
     services/shelllink.h services/shelllink.cpp
     services/windowicons.h services/windowicons.cpp
+    services/appindex.h services/appindex.cpp
+    ../common/launch.h ../common/launch.cpp
+    ../common/log.h ../common/log.cpp
     resources/resource.h
     resources/visor.rc
 )
@@ -23,6 +26,7 @@ qt_add_qml_module(visor
         shellroot.h
         visorapi.h visorapi.cpp
         panelwindow.h panelwindow.cpp
+        popupwindow.h popupwindow.cpp
         services/systemclock.h services/systemclock.cpp
         services/activewindow.h services/activewindow.cpp
         services/audio.h services/audio.cpp
@@ -30,6 +34,9 @@ qt_add_qml_module(visor
         services/tasks.h services/tasks.cpp
         services/systemtray.h services/systemtray.cpp
         services/workspaces.h services/workspaces.cpp
+        services/shellcontrol.h services/shellcontrol.cpp
+        services/keybindings.h services/keybindings.cpp
+        services/apps.h services/apps.cpp
 )
 
 # services/ is listed too: the generated QML type registration includes
@@ -55,6 +62,9 @@ target_link_libraries(visor PRIVATE
     Qt6::Quick
     shell32
     ole32
+    advapi32
+    dwmapi
+    powrprof
     windowsapp
 )
 

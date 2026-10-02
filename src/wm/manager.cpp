@@ -209,6 +209,7 @@ WindowManager::WindowManager(Config config, QObject *parent)
     qInfo() << "tiling" << m_managed.size() << "windows on" << m_monitors.size() << "monitors";
     registerBindings();
     sendState();
+    sendBindings();
 }
 
 WindowManager::~WindowManager()
@@ -240,6 +241,7 @@ void WindowManager::setConfig(Config config)
     unregisterBindings();
     m_config = std::move(config);
     registerBindings();
+    sendBindings();
     for (quintptr w : std::as_const(m_colored)) {
         if (!win::exists(w))
             continue;
@@ -981,11 +983,31 @@ QJsonObject WindowManager::desktopState() const
 
 void WindowManager::sendState()
 {
+    sendToShell(desktopState());
+}
+
+void WindowManager::sendBindings()
+{
+    QJsonArray bindings;
+    for (const Binding &b : std::as_const(m_config.bindings)) {
+        bindings.append(QJsonObject{
+            {QStringLiteral("keys"), b.name},
+            {QStringLiteral("description"), b.description},
+            {QStringLiteral("dispatcher"), b.dispatcher},
+            {QStringLiteral("argument"), b.argument},
+            {QStringLiteral("group"), b.group},
+        });
+    }
+    sendToShell({{QStringLiteral("type"), QStringLiteral("bindings")}, {QStringLiteral("bindings"), bindings}});
+}
+
+void WindowManager::sendToShell(const QJsonObject &message)
+{
     // To visor-shell, which passes it on to Visor (linkprotocol.h).
     const HWND shell = FindWindowW(link::kShellLinkClass, nullptr);
     if (!shell)
         return;
-    const QByteArray payload = QJsonDocument(desktopState()).toJson(QJsonDocument::Compact);
+    const QByteArray payload = QJsonDocument(message).toJson(QJsonDocument::Compact);
     COPYDATASTRUCT cds{};
     cds.dwData = link::kLinkMagic;
     cds.cbData = DWORD(payload.size());
@@ -1009,11 +1031,12 @@ void WindowManager::registerBindings()
     for (qsizetype i = 0; i < bindings.size(); ++i) {
         const Binding &b = bindings[i];
         const int id = int(i + 1);
-        if (RegisterHotKey(hwnd, id, b.modifiers | (b.repeat ? 0 : MOD_NOREPEAT), b.key))
+        // Release bindings only exist in the hook (hotkeys fire on press).
+        if (!b.release && RegisterHotKey(hwnd, id, b.modifiers | (b.repeat ? 0 : MOD_NOREPEAT), b.key))
             continue;
-        if (GetLastError() != ERROR_HOTKEY_ALREADY_REGISTERED)
+        if (!b.release && GetLastError() != ERROR_HOTKEY_ALREADY_REGISTERED)
             qWarning().noquote() << "cannot bind" << b.name << "error" << GetLastError();
-        hooked.append({b.modifiers, b.key, b.repeat, id});
+        hooked.append({b.modifiers, b.key, b.repeat, b.release, id});
     }
     m_registeredBindings = bindings.size();
     m_keyHook->setKeys(hooked);
@@ -1044,6 +1067,12 @@ void WindowManager::dispatch(const Binding &binding)
     qInfo().noquote() << binding.name << "->" << d << binding.argument;
     if (d == QLatin1String("exec")) {
         visor::run(binding.argument);
+    } else if (d == QLatin1String("visor")) {
+        // Visor opens a window that takes typing (the launcher): let it come
+        // to the front, since the key press gave us the foreground rights.
+        AllowSetForegroundWindow(ASFW_ANY);
+        sendToShell({{QStringLiteral("type"), QStringLiteral("visor.command")},
+                     {QStringLiteral("name"), binding.argument.trimmed().toLower()}});
     } else if (d == QLatin1String("killactive")) {
         killActive();
     } else if (d == QLatin1String("togglefloating")) {

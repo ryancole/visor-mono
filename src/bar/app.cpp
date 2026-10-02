@@ -1,5 +1,6 @@
 #include "app.h"
 
+#include "services/appindex.h"
 #include "services/shelllink.h"
 #include "tray.h"
 
@@ -60,6 +61,7 @@ void App::start()
     // Before the config loads, so QML types built on it start populated.
     m_shellLink = std::make_unique<ShellLink>();
     connect(m_shellLink.get(), &ShellLink::quitRequested, this, &App::quit);
+    m_apps = std::make_unique<AppIndex>(); // indexes in the background, a little later
     m_shell.load();
 }
 

@@ -28,12 +28,16 @@ struct WindowRule
 // A key binding: `bind = SUPER SHIFT, left, swapwindow, l`.
 //   bind[flags] = MODS, key, dispatcher[, argument]
 //   bindd[flags] = MODS, key, description, dispatcher[, argument]
-// Flags: e repeats while the key is held. Modifiers: SUPER (or WIN), SHIFT,
-// CTRL, ALT, in any order and separated any way. Keys use Hyprland's
-// (xkb) names: a-z, 0-9, F1-F24, Return, space, Tab, Escape, left, right,
-// up, down, minus, equal, comma, period, slash, ...
+// Flags: e repeats while the key is held; r fires when the key is released,
+// and only if nothing else was pressed in between (`bindr = SUPER, SUPER_L,
+// ...` is a bare Win press). Modifiers: SUPER (or WIN), SHIFT, CTRL, ALT, in
+// any order and separated any way. Keys use Hyprland's (xkb) names: a-z,
+// 0-9, F1-F24, Return, space, Tab, Escape, left, right, up, down, minus,
+// equal, comma, period, slash, SUPER_L, SUPER_R, ...
 // Dispatchers (as in Hyprland):
 //   exec <command line>    killactive          togglefloating
+//   visor <name>           (ours: tells Visor to run its `name` command, e.g.
+//                           launcher, menu, keys, run)
 //   fullscreen [0|1]       (0: whole monitor, over the bar; 1: maximise)
 //   movefocus l|r|u|d      swapwindow l|r|u|d  togglesplit
 //   resizeactive <dx> <dy> (pixels; grows/shrinks the window's split)
@@ -47,10 +51,14 @@ struct Binding
     quint32 modifiers = 0; // MOD_ALT | MOD_CONTROL | MOD_SHIFT | MOD_WIN
     quint32 key = 0;       // virtual-key code
     bool repeat = false;
+    bool release = false;
     QString dispatcher;
     QString argument;
     QString description;
     QString name;          // e.g. "SUPER+SHIFT+left", for the log
+    // Bindings separated by a blank or comment line in the config are in
+    // different groups; the cheat sheet in Visor shows them that way.
+    int group = 0;
 };
 
 // visor-wm's settings, read from a hyprland.conf-style file (wm.conf).
