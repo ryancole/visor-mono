@@ -15,7 +15,7 @@
     Runs on Windows PowerShell 5.1 too, so it works inside a fresh VM.
 
 .EXAMPLE
-    .\install.ps1 -Path C:\visor-shell\visor-session.exe
+    .\install.ps1 -Path C:\visor\visor-session.exe
 #>
 [CmdletBinding()]
 param(
@@ -40,7 +40,7 @@ if (-not $isVm -and -not $AllowPhysicalMachine) {
 # Never point Winlogon at something that can't start: check the whole set.
 $Path = (Resolve-Path $Path).Path
 $dir = Split-Path -Parent $Path
-foreach ($file in 'visor-session.exe', 'visor-shell.exe', 'Qt6Core.dll') {
+foreach ($file in 'visor-session.exe', 'visor-shell.exe', 'visor.exe', 'Qt6Core.dll') {
     if (-not (Test-Path (Join-Path $dir $file))) {
         throw "$file is missing from $dir"
     }

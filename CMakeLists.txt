@@ -1,18 +1,19 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(visor-shell VERSION 0.1.0 LANGUAGES CXX)
+project(visor VERSION 0.1.0 LANGUAGES CXX)
 
 if(NOT WIN32)
-    message(FATAL_ERROR "visor-shell only supports Windows.")
+    message(FATAL_ERROR "visor only supports Windows.")
 endif()
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Executables land directly in the build dir so it can be copied as-is.
+# Every executable lands directly in the build dir, next to the Qt runtime,
+# so the build dir runs as-is and deploys as one folder.
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 
-find_package(Qt6 6.10 QUIET COMPONENTS Core)
+find_package(Qt6 6.10 QUIET COMPONENTS Core Gui Qml Quick)
 if(NOT Qt6_FOUND)
     message(FATAL_ERROR
         "Qt 6.10+ was not found.\n"

@@ -13,7 +13,7 @@ namespace {
 const wchar_t kClassName[] = L"VisorDesktop";
 
 // Shown in the corner of the primary monitor while there is no launcher yet.
-const wchar_t kHints[] = L"visor-shell " VISOR_SHELL_VERSION L" — phase 0\n"
+const wchar_t kHints[] = L"visor-shell " VISOR_VERSION L" — phase 0\n"
                          L"Ctrl+Alt+E    File Explorer\n"
                          L"Ctrl+Alt+T    Terminal\n"
                          L"Ctrl+Alt+R    Run\n"

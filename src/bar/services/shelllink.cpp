@@ -1,5 +1,7 @@
 #include "services/shelllink.h"
 
+#include "common/linkprotocol.h"
+
 #include <QCoreApplication>
 #include <QDebug>
 #include <QJsonArray>
@@ -11,10 +13,9 @@
 
 namespace {
 
-// Keep in sync with visor-shell/src/common/linkprotocol.h.
-constexpr ULONG_PTR kLinkMagic = 0x56534C31; // 'VSL1'
-constexpr wchar_t kShellLinkClass[] = L"VisorShellLink";
-const UINT kShellCreated = RegisterWindowMessageW(L"VisorShellCreated");
+using visor::link::kLinkMagic;
+using visor::link::kShellLinkClass;
+const UINT kShellCreated = RegisterWindowMessageW(visor::link::kShellCreatedMessage);
 
 ShellLink *s_instance = nullptr;
 

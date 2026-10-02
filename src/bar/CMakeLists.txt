@@ -1,4 +1,7 @@
+# visor: the status bar, configured in QML. Runs on its own (e.g. under
+# Explorer) or with visor-shell, which feeds it tasks and tray icons.
 qt_add_executable(visor WIN32
+    ../common/linkprotocol.h
     main.cpp
     app.h app.cpp
     settings.h settings.cpp
@@ -29,23 +32,20 @@ qt_add_qml_module(visor
 )
 
 # services/ is listed too: the generated QML type registration includes
-# headers by bare file name.
+# headers by bare file name. src/ is for the shared common/ headers.
 target_include_directories(visor PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/services
+    ${PROJECT_SOURCE_DIR}/src
 )
 
 target_compile_definitions(visor PRIVATE
-    WIN32_LEAN_AND_MEAN
-    NOMINMAX
-    UNICODE _UNICODE
-    _WIN32_WINNT=0x0A00
-    VISOR_VERSION="${PROJECT_VERSION}"
+    ${VISOR_DEFINITIONS}
     # Debug builds fall back to the in-repo config so edits there live-reload.
     $<$<CONFIG:Debug>:VISOR_DEV_CONFIG_DIR="${CMAKE_CURRENT_SOURCE_DIR}/config">
 )
 
-target_compile_options(visor PRIVATE /W4 /permissive- /utf-8 /bigobj /Zc:__cplusplus)
+target_compile_options(visor PRIVATE ${VISOR_COMPILE_OPTIONS} /bigobj)
 
 target_link_libraries(visor PRIVATE
     Qt6::Core
@@ -66,10 +66,8 @@ add_custom_command(TARGET visor POST_BUILD
 
 # Copy the Qt runtime (DLLs, QML modules, platform plugin) next to the exe so it
 # runs without Qt on PATH.
-get_target_property(_qmake Qt6::qmake IMPORTED_LOCATION)
-get_filename_component(_qt_bin "${_qmake}" DIRECTORY)
 add_custom_command(TARGET visor POST_BUILD
-    COMMAND "${_qt_bin}/windeployqt.exe"
+    COMMAND "${VISOR_QT_BIN}/windeployqt.exe"
         --qmldir ${CMAKE_CURRENT_SOURCE_DIR}/config
         --no-translations
         --no-system-d3d-compiler

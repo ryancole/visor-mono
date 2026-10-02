@@ -158,7 +158,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 {
     g_dataDir = localAppData() + L"\\visor-shell";
     trimLog();
-    log(L"visor-session " VISOR_SHELL_VERSION " starting");
+    log(L"visor-session " VISOR_VERSION " starting");
 
     // Winlogon restarts the configured shell when the shell-window process
     // (visor-shell) dies, so a crash can start a second visor-session while

@@ -1,14 +1,17 @@
-# Configures and builds visor-shell from a plain PowerShell prompt by loading the
-# MSVC environment first (Ninja needs cl.exe on PATH).
+# Configures and builds everything (visor, visor-shell, visor-session) from a
+# plain PowerShell prompt by loading the MSVC environment first (Ninja needs
+# cl.exe on PATH).
 #
-#   pwsh etc/build.ps1              # debug
-#   pwsh etc/build.ps1 release      # what etc/vm/deploy.ps1 ships to the VM
-#   pwsh etc/build.ps1 debug -Run   # build, then run alongside Explorer (hosted mode)
+#   pwsh etc/build.ps1                # debug
+#   pwsh etc/build.ps1 release        # what etc/vm/deploy.ps1 ships to the VM
+#   pwsh etc/build.ps1 -Run           # build, then run the bar
+#   pwsh etc/build.ps1 -RunShell      # build, then run visor-shell alongside Explorer
 
 [CmdletBinding()]
 param(
     [ValidateSet('debug', 'release')][string]$Preset = 'debug',
-    [switch]$Run
+    [switch]$Run,
+    [switch]$RunShell
 )
 
 $ErrorActionPreference = 'Stop'
@@ -37,5 +40,6 @@ try {
     Pop-Location
 }
 
+if ($Run) { & "$Root\build\$Preset\visor.exe" }
 # Hosted mode only: on a real machine visor-shell must never replace Explorer.
-if ($Run) { & "$Root\build\$Preset\visor-shell.exe" --mode hosted }
+if ($RunShell) { & "$Root\build\$Preset\visor-shell.exe" --mode hosted }

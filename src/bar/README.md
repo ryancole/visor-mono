@@ -12,20 +12,7 @@ system data, and live reload, without a browser engine.
   the new config doesn't compile, the running bar stays up and the error is
   logged.
 
-## Building
-
-Requirements: Visual Studio 2022+ with the C++ workload, CMake 3.21+, Ninja,
-and Python 3 (used once, to fetch Qt).
-
-```powershell
-pwsh etc/bootstrap.ps1        # installs pinned Qt 6.10.3 into .deps/ (gitignored)
-pwsh etc/build.ps1            # debug build -> build/debug/visor.exe
-pwsh etc/build.ps1 release -Run
-```
-
-`etc/build.ps1` loads the MSVC environment for you. From a VS Developer prompt or
-an IDE with CMake presets support you can use `cmake --preset debug` /
-`cmake --build --preset debug` directly.
+Built with everything else; see the [top-level README](../../README.md).
 
 ## Config
 
@@ -34,10 +21,10 @@ visor loads the first of:
 1. `--config <file>`
 2. `%VISOR_CONFIG%`
 3. `~/.config/visor/shell.qml`
-4. `src/config/shell.qml` (debug builds only)
+4. `src/bar/config/shell.qml` (debug builds only)
 5. `config/shell.qml` next to the exe (the default config)
 
-Copy `src/config` to `~/.config/visor` to start customising.
+Copy `src/bar/config` to `~/.config/visor` to start customising.
 
 Run it from a terminal to see logs and QML errors.
 
@@ -66,8 +53,8 @@ config can put them in the bar itself.
 | `ActiveWindow` | singleton | Focused window: `title`, `appName`, `processPath`, `processId`, `className`. |
 | `Audio` | singleton | Default output device: `volume` (0–1, writable), `muted` (writable), `deviceName`, `toggleMute()`. |
 | `Media` | singleton | Current media session: `title`, `artist`, `album`, `appId`, `playing`, `playPause()`, `next()`, `previous()`. |
-| `SystemTray` | singleton model | Notification-area icons, hosted by [visor-shell](../visor-shell) (empty without it). Roles: `iconId`, `tooltip`, `icon`, `processId`. `click(iconId, button)` with `"left"`, `"right"`, `"middle"` or `"double"` forwards the click to the app. |
-| `Tasks` | singleton model | Open app windows, from [visor-shell](../visor-shell) (empty without it; `available` says which). Roles: `hwnd`, `title`, `appName`, `processPath`, `active`, `flashing`, `icon` (an `image://` URL). `activate(hwnd)` (focus, or minimise if focused), `minimize(hwnd)`, `close(hwnd)`. |
+| `SystemTray` | singleton model | Notification-area icons, hosted by [visor-shell](../shell) (empty without it). Roles: `iconId`, `tooltip`, `icon`, `processId`. `click(iconId, button)` with `"left"`, `"right"`, `"middle"` or `"double"` forwards the click to the app. |
+| `Tasks` | singleton model | Open app windows, from [visor-shell](../shell) (empty without it; `available` says which). Roles: `hwnd`, `title`, `appName`, `processPath`, `active`, `flashing`, `icon` (an `image://` URL). `activate(hwnd)` (focus, or minimise if focused), `minimize(hwnd)`, `close(hwnd)`. |
 
 One bar per monitor:
 
@@ -99,9 +86,8 @@ ShellRoot {
 ## Layout
 
 ```
-src/            C++ sources, CMake, and the default QML config (src/config)
-src/resources/  Icon and Windows resource script
-src/services/   System data services exposed to QML
-etc/            Scripts (bootstrap, build, icon generator)
-.deps/          Local Qt toolchain (created by etc/bootstrap.ps1, not committed)
+src/bar/            C++ sources and CMake for visor.exe
+src/bar/config/     The default QML config
+src/bar/resources/  Icon and Windows resource script
+src/bar/services/   System data services exposed to QML
 ```

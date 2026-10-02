@@ -1,6 +1,7 @@
 #pragma once
 
-// The visor-shell <-> Visor link. Keep in sync with visor/src/services/shelllink.cpp.
+// The visor-shell <-> Visor link. Both ends: src/shell/visorlink.cpp and
+// src/bar/services/shelllink.cpp.
 //
 // Transport: WM_COPYDATA between two hidden top-level windows, with
 // dwData = kLinkMagic and a UTF-8 JSON object as the payload ({"type": ...}).

@@ -1,22 +1,21 @@
 #Requires -Version 7
 <#
 .SYNOPSIS
-    Copies a visor-shell build into the test VM, and installs, restarts or
-    removes it there.
+    Copies a build (visor, visor-shell, visor-session and the Qt runtime) into
+    the test VM, and installs, restarts or removes it there.
 
 .DESCRIPTION
     Uses PowerShell Direct, so it works without networking and even when the
     VM's desktop is black. Needs Hyper-V admin rights on the host and the login
     saved by etc/vm/save-credential.ps1.
 
-    The build goes to C:\visor-shell in the VM (Visor, with -Visor, to
-    C:\visor-shell\visor). Running visor processes are stopped first so their
-    files can be replaced, and restarted afterwards on the VM's desktop.
+    The build dir goes to C:\visor in the VM. Files of running processes are
+    renamed aside rather than stopped first, then the shell is restarted onto
+    the new build.
 
 .EXAMPLE
     pwsh etc/vm/deploy.ps1 -Install        # first time: copy + make it the shell
     pwsh etc/vm/deploy.ps1                 # later: copy + restart the running shell
-    pwsh etc/vm/deploy.ps1 -Visor          # also ship ../visor/build/release
     pwsh etc/vm/deploy.ps1 -Restore        # emergency: back to Explorer, now
 #>
 [CmdletBinding(DefaultParameterSetName = 'Deploy')]
@@ -29,13 +28,6 @@ param(
     [Parameter(ParameterSetName = 'Deploy')]
     [switch] $Install,
 
-    # Also deploy Visor from its release build.
-    [Parameter(ParameterSetName = 'Deploy')]
-    [switch] $Visor,
-
-    [Parameter(ParameterSetName = 'Deploy')]
-    [string] $VisorBuild,
-
     # Undo install.ps1 in the VM, stop visor-shell, and start Explorer on the
     # VM's desktop. Copies nothing.
     [Parameter(Mandatory, ParameterSetName = 'Restore')]
@@ -46,7 +38,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $Root = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
-$Target = 'C:\visor-shell'
+$Target = 'C:\visor'
 
 $credFile = Join-Path $env:LOCALAPPDATA 'visor-shell\vm-cred.xml'
 if (-not (Test-Path $credFile)) {
@@ -93,15 +85,18 @@ $vmHelpers = {
         Start-Sleep -Milliseconds 500
     }
 
-    # Running exes and loaded DLLs can't be overwritten, but they can be
-    # renamed. Move them aside so new files can be copied in while the old
-    # shell keeps running; the leftovers are deleted on a later deploy.
-    function Move-Aside([string] $Dir, [string[]] $Names) {
-        Get-ChildItem $Dir -Filter '*.old' -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
-        foreach ($name in $Names) {
-            $path = Join-Path $Dir $name
-            if (Test-Path $path) {
-                Rename-Item $path "$name.$([guid]::NewGuid().ToString('N').Substring(0, 8)).old"
+    # Running exes and loaded DLLs (in any subfolder) can't be overwritten,
+    # but they can be renamed. Move every file about to be replaced aside so
+    # the new ones can be copied in while the old processes keep running;
+    # leftovers are deleted on a later deploy.
+    function Move-Aside([string] $Dir, [string[]] $RelativePaths) {
+        Get-ChildItem $Dir -Recurse -Filter '*.old' -ErrorAction SilentlyContinue |
+            Remove-Item -Force -ErrorAction SilentlyContinue
+        foreach ($relative in $RelativePaths) {
+            $path = Join-Path $Dir $relative
+            if (Test-Path $path -PathType Leaf) {
+                $leaf = Split-Path -Leaf $path
+                Rename-Item $path "$leaf.$([guid]::NewGuid().ToString('N').Substring(0, 8)).old"
             }
         }
     }
@@ -136,7 +131,7 @@ try {
     }
 
     $build = Join-Path $Root "build\$Preset"
-    foreach ($file in 'visor-session.exe', 'visor-shell.exe', 'Qt6Core.dll') {
+    foreach ($file in 'visor-session.exe', 'visor-shell.exe', 'visor.exe', 'Qt6Core.dll') {
         if (-not (Test-Path (Join-Path $build $file))) {
             throw "$file not found in $build. Build first: pwsh etc/build.ps1 $Preset"
         }
@@ -144,41 +139,28 @@ try {
 
     $wasRunning = Invoke-Command -Session $session -ScriptBlock { [bool](Get-Process visor-shell -ErrorAction SilentlyContinue) }
 
-    # The exes, the Qt runtime, and PDBs for symbolising crashes.
-    $files = Get-ChildItem $build -File | Where-Object Extension -in '.exe', '.dll', '.pdb'
-    $names = @($files.Name) + 'install.ps1', 'uninstall.ps1'
+    # Everything the build put next to the exes (Qt runtime, QML modules,
+    # plugins, the default config, PDBs), minus CMake/Ninja's own files.
+    $skip = 'CMakeFiles', 'src', '.qt', '.rcc', 'CMakeCache.txt', 'build.ninja', 'cmake_install.cmake',
+        'compile_commands.json', '.ninja_deps', '.ninja_log'
+    $items = Get-ChildItem $build -Force | Where-Object { $_.Name -notin $skip -and $_.Extension -notin '.ilk', '.exp', '.lib' }
+    $relative = foreach ($item in $items) {
+        if ($item.PSIsContainer) {
+            Get-ChildItem $item.FullName -Recurse -File | ForEach-Object { [IO.Path]::GetRelativePath($build, $_.FullName) }
+        } else {
+            $item.Name
+        }
+    }
+    $relative = @($relative) + 'install.ps1', 'uninstall.ps1'
     Invoke-Command -Session $session -ScriptBlock {
         New-Item -ItemType Directory -Force $using:Target | Out-Null
-        Move-Aside $using:Target $using:names
+        Move-Aside $using:Target $using:relative
     }
-    Copy-Item -ToSession $session -Path $files.FullName -Destination $Target -Force
+    Copy-Item -ToSession $session -Path $items.FullName -Destination $Target -Recurse -Force
     foreach ($script in 'install.ps1', 'uninstall.ps1') {
         Copy-Item -ToSession $session -Path "$Root\etc\$script" -Destination $Target -Force
     }
-    Write-Host "Copied visor-shell ($Preset) to $Target in '$Name'."
-
-    if ($Visor) {
-        if (-not $VisorBuild) {
-            $VisorBuild = Join-Path (Split-Path -Parent $Root) 'visor\build\release'
-        }
-        if (-not (Test-Path "$VisorBuild\visor.exe")) {
-            throw "visor.exe not found in $VisorBuild. Build Visor's release preset first."
-        }
-        # Everything windeployqt produced, minus CMake/Ninja's own files.
-        $skip = 'CMakeFiles', 'src', '.qt', 'CMakeCache.txt', 'build.ninja', 'cmake_install.cmake',
-            'compile_commands.json', '.ninja_deps', '.ninja_log'
-        $items = Get-ChildItem $VisorBuild -Force | Where-Object Name -notin $skip
-        Invoke-Command -Session $session -ScriptBlock {
-            # Nothing restarts Visor on its own, so it can simply be stopped.
-            Get-Process visor -ErrorAction SilentlyContinue | Stop-Process -Force
-            Start-Sleep -Milliseconds 500
-            $dir = Join-Path $using:Target 'visor'
-            if (Test-Path $dir) { Remove-Item $dir -Recurse -Force }
-            New-Item -ItemType Directory $dir | Out-Null
-        }
-        Copy-Item -ToSession $session -Path $items.FullName -Destination "$Target\visor" -Recurse -Force
-        Write-Host "Copied Visor to $Target\visor."
-    }
+    Write-Host "Copied the $Preset build to $Target in '$Name'."
 
     if ($Install) {
         Invoke-Command -Session $session -FilePath "$Root\etc\install.ps1" -ArgumentList "$Target\visor-session.exe"

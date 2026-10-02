@@ -6,7 +6,7 @@ Tags used below: **[V]** = confirmed by a source (Microsoft docs, or ManagedShel
 
 ## 0. Goal: an Omarchy-style desktop on Windows
 
-[Omarchy](https://omarchy.org) is an opinionated, keyboard-driven desktop: Hyprland tiling, Waybar, a launcher, one-switch theming, and notifications and on-screen displays. Visor plays the role of Waybar. This repo is the rest of the desktop.
+[Omarchy](https://omarchy.org) is an opinionated, keyboard-driven desktop: Hyprland tiling, Waybar, a launcher, one-switch theming, and notifications and on-screen displays. Visor (`src/bar`) plays the role of Waybar. The rest of this repo is the rest of the desktop.
 
 | Omarchy piece | Ours | Where it is covered |
 | --- | --- | --- |

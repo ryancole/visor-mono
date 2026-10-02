@@ -49,7 +49,7 @@ const wchar_t *windowClass()
 
 QString visorPath()
 {
-    return QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("visor/visor.exe"));
+    return QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("visor.exe"));
 }
 
 } // namespace

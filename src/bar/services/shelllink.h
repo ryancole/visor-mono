@@ -15,7 +15,7 @@ class QWinEventNotifier;
 // disconnected and everything built on it is empty.
 //
 // Protocol: WM_COPYDATA with a JSON payload between two hidden windows; see
-// visor-shell's src/common/linkprotocol.h (keep the constants in sync).
+// src/common/linkprotocol.h.
 class ShellLink : public QObject
 {
     Q_OBJECT

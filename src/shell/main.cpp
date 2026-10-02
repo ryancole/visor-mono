@@ -108,7 +108,7 @@ int main(int argc, char *argv[])
 
     QCoreApplication app(argc, argv);
     QCoreApplication::setApplicationName(QStringLiteral("visor-shell"));
-    QCoreApplication::setApplicationVersion(QStringLiteral(VISOR_SHELL_VERSION));
+    QCoreApplication::setApplicationVersion(QStringLiteral(VISOR_VERSION));
     visor::installLogHandler();
 
     QCommandLineParser parser;
@@ -119,7 +119,7 @@ int main(int argc, char *argv[])
     parser.addOption(modeOption);
     parser.process(app);
 
-    qInfo() << "visor-shell" << VISOR_SHELL_VERSION << "starting, pid" << QCoreApplication::applicationPid();
+    qInfo() << "visor-shell" << VISOR_VERSION << "starting, pid" << QCoreApplication::applicationPid();
 
     // Shell APIs (ShellExecuteEx, the Run dialog) expect an STA.
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);

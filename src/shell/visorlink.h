@@ -15,8 +15,8 @@ namespace visor {
 // visor-shell's end of the link to Visor (protocol: common/linkprotocol.h),
 // and Visor's supervisor:
 //
-//   - start(true) launches Visor (visor\visor.exe next to us) unless a
-//     running Visor connects first.
+//   - start(true) launches Visor (visor.exe next to us) unless a running
+//     Visor connects first.
 //   - Whichever Visor process is connected is watched. A crash relaunches it
 //     (at most 5 times in 2 minutes). A clean exit is either a quit or one of
 //     Visor's self-restarts (renderer change), so it waits for a successor to
