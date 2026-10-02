@@ -94,7 +94,16 @@ ActiveWindow::~ActiveWindow()
 
 void ActiveWindow::onForegroundChanged(void *handle)
 {
-    const auto hwnd = static_cast<HWND>(handle);
+    auto hwnd = static_cast<HWND>(handle);
+    // The desktop (Explorer's Progman, or visor-shell's window) and Visor's
+    // own pop-ups aren't apps: with those in front there is no active
+    // window, as the taskbar sees it.
+    if (hwnd) {
+        DWORD pid = 0;
+        GetWindowThreadProcessId(hwnd, &pid);
+        if (hwnd == GetShellWindow() || pid == GetCurrentProcessId())
+            hwnd = nullptr;
+    }
     if (hwnd == m_hwnd) {
         refreshTitle();
         return;
