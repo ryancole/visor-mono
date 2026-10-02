@@ -1,0 +1,4 @@
+#include "resource.h"
+
+// First icon resource is also the exe's icon in Explorer.
+IDI_VISOR ICON "visor.ico"
