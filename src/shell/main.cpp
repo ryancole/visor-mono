@@ -12,7 +12,8 @@
 #include "shell/desktopwindow.h"
 #include "shell/hotkeys.h"
 #include "shell/launch.h"
-#include "shell/log.h"
+#include "shell/supervisor.h"
+#include "common/log.h"
 #include "shell/tasks.h"
 #include "shell/trayhost.h"
 #include "shell/visorlink.h"
@@ -109,7 +110,7 @@ int main(int argc, char *argv[])
     QCoreApplication app(argc, argv);
     QCoreApplication::setApplicationName(QStringLiteral("visor-shell"));
     QCoreApplication::setApplicationVersion(QStringLiteral(VISOR_VERSION));
-    visor::installLogHandler();
+    visor::installLogHandler(QStringLiteral("shell"));
 
     QCommandLineParser parser;
     parser.addHelpOption();
@@ -232,6 +233,16 @@ int main(int argc, char *argv[])
 
     // Under Explorer the user runs Visor themselves; it still connects.
     link.start(mode == Mode::Replace);
+
+    // The tiling window manager. Replace mode only: on a machine where
+    // Explorer is the shell, tiling is opt-in (run visor-wm by hand).
+    std::unique_ptr<visor::Supervisor> windowManager;
+    if (mode == Mode::Replace) {
+        windowManager = std::make_unique<visor::Supervisor>(
+            QStringLiteral("visor-wm.exe"),
+            QStringList{QStringLiteral("--shell-pid"), QString::number(QCoreApplication::applicationPid())});
+        windowManager->start();
+    }
 
     visor::Hotkeys hotkeys;
     // Queued so actions run outside the WM_HOTKEY handler.

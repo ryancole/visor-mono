@@ -18,4 +18,5 @@ get_filename_component(VISOR_QT_BIN "${_qmake}" DIRECTORY)
 
 add_subdirectory(session) # visor-session.exe: what Winlogon starts
 add_subdirectory(shell)   # visor-shell.exe: shell services
+add_subdirectory(wm)      # visor-wm.exe: the tiling window manager
 add_subdirectory(bar)     # visor.exe: the status bar (all UI)

@@ -1,11 +1,12 @@
 # visor-shell: the shell services process (desktop, tray, app bars, tasks,
-# hotkeys, Visor supervision). QtCore only; no UI toolkit.
+# hotkeys, supervision of Visor and visor-wm). QtCore only; no UI toolkit.
 qt_add_executable(visor-shell WIN32
     ../common/exitcodes.h
     ../common/linkprotocol.h
     main.cpp
-    log.h log.cpp
+    ../common/log.h ../common/log.cpp
     launch.h launch.cpp
+    supervisor.h supervisor.cpp
     desktopwindow.h desktopwindow.cpp
     hotkeys.h hotkeys.cpp
     wallpaper.h wallpaper.cpp

@@ -1,7 +1,7 @@
 #Requires -Version 7
 <#
 .SYNOPSIS
-    Copies a build (visor, visor-shell, visor-session and the Qt runtime) into
+    Copies a build (visor, visor-shell, visor-wm, visor-session and the Qt runtime) into
     the test VM, and installs, restarts or removes it there.
 
 .DESCRIPTION
@@ -79,7 +79,7 @@ $vmHelpers = {
     # Winlogon restarts the configured shell when visor-shell dies, so when
     # installed the shell comes straight back (with whatever files are there).
     function Stop-Visor {
-        foreach ($name in 'visor-session', 'visor-shell', 'visor') {
+        foreach ($name in 'visor-session', 'visor-shell', 'visor-wm', 'visor') {
             Get-Process $name -ErrorAction SilentlyContinue | Stop-Process -Force
         }
         Start-Sleep -Milliseconds 500

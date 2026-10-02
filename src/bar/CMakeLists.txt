@@ -57,10 +57,12 @@ target_link_libraries(visor PRIVATE
     windowsapp
 )
 
-# Ship the default config next to the exe.
-add_custom_command(TARGET visor POST_BUILD
+# Ship the default config (Visor's QML and visor-wm's wm.conf) next to the
+# exes. Runs on every build, so config edits reach the build dir (and the VM)
+# even when no code changed.
+add_custom_target(visor-config ALL
     COMMAND ${CMAKE_COMMAND} -E copy_directory
-        ${CMAKE_CURRENT_SOURCE_DIR}/config $<TARGET_FILE_DIR:visor>/config
+        ${CMAKE_CURRENT_SOURCE_DIR}/config ${CMAKE_BINARY_DIR}/config
     VERBATIM
 )
 

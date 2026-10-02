@@ -1,4 +1,4 @@
-#include "shell/log.h"
+#include "common/log.h"
 
 #include <QDateTime>
 #include <QDebug>
@@ -56,13 +56,13 @@ QString dataDir()
         .filePath(QStringLiteral("visor-shell"));
 }
 
-void installLogHandler()
+void installLogHandler(const QString &name)
 {
     const QDir dir(dataDir() + QStringLiteral("/logs"));
     dir.mkpath(QStringLiteral("."));
 
     QFile &file = logFile();
-    file.setFileName(dir.filePath(QStringLiteral("shell.log")));
+    file.setFileName(dir.filePath(name + QStringLiteral(".log")));
     if (file.size() > kMaxLogBytes)
         file.remove();
     const bool opened = file.open(QIODevice::Append | QIODevice::Text);
