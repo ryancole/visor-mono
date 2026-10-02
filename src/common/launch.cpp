@@ -1,4 +1,4 @@
-#include "shell/launch.h"
+#include "common/launch.h"
 
 #include <QDebug>
 
@@ -49,6 +49,25 @@ bool shellExecuteSync(const QString &file, const QString &parameters)
 void shellExecute(const QString &file, const QString &parameters)
 {
     runDetached([file, parameters] { shellExecuteSync(file, parameters); });
+}
+
+void run(const QString &commandLine)
+{
+    const QString line = commandLine.trimmed();
+    QString file;
+    QString parameters;
+    if (line.startsWith(QLatin1Char('"'))) {
+        const qsizetype end = line.indexOf(QLatin1Char('"'), 1);
+        file = end < 0 ? line.mid(1) : line.mid(1, end - 1);
+        parameters = end < 0 ? QString() : line.mid(end + 1).trimmed();
+    } else {
+        const qsizetype space = line.indexOf(QLatin1Char(' '));
+        file = space < 0 ? line : line.left(space);
+        parameters = space < 0 ? QString() : line.mid(space + 1).trimmed();
+    }
+    if (file.isEmpty())
+        return;
+    shellExecute(file, parameters);
 }
 
 void openFileExplorer()

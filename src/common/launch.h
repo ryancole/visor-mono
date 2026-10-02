@@ -11,6 +11,10 @@ namespace visor {
 // ShellExecuteEx of a file, app alias, or URI.
 void shellExecute(const QString &file, const QString &parameters = {});
 
+// Runs a command line: the first word (or "quoted path") is the program, the
+// rest its arguments, e.g. `wt.exe -d C:\` or `"C:\Program Files\app.exe" -x`.
+void run(const QString &commandLine);
+
 // Opens a File Explorer window on This PC. Explorer is always given a target:
 // a bare explorer.exe may try to become the shell.
 void openFileExplorer();

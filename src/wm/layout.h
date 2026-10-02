@@ -63,6 +63,18 @@ public:
                 int cursorY = 0);
     void remove(Window window);
 
+    // Swaps two windows' places (both in this layout).
+    void swap(Window a, Window b);
+    // Puts `with` where `window` is (for swapping across layouts).
+    void replace(Window window, Window with);
+    // Flips the direction of the split `window` belongs to.
+    void toggleSplit(Window window);
+    // Grows (or with negative values shrinks) `window` by dx/dy pixels by
+    // moving the nearest side-by-side (dx) / stacked (dy) split it is part
+    // of, as Hyprland's resizeactive does. Uses the sizes from the last
+    // arrange(). Returns false when there is no such split.
+    bool resize(Window window, int dx, int dy);
+
     // Where every window goes in `area`. gapsOut is kept from the edges of
     // the area, and 2 * gapsIn between neighbouring windows (Hyprland's
     // general:gaps_out and gaps_in).

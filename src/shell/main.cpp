@@ -11,7 +11,7 @@
 #include "shell/appbars.h"
 #include "shell/desktopwindow.h"
 #include "shell/hotkeys.h"
-#include "shell/launch.h"
+#include "common/launch.h"
 #include "shell/supervisor.h"
 #include "common/log.h"
 #include "shell/tasks.h"

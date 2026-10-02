@@ -25,6 +25,29 @@ struct WindowRule
     bool matches(const QString &windowClass, const QString &title, const QString &exe) const;
 };
 
+// A key binding: `bind = SUPER SHIFT, left, swapwindow, l`.
+//   bind[flags] = MODS, key, dispatcher[, argument]
+//   bindd[flags] = MODS, key, description, dispatcher[, argument]
+// Flags: e repeats while the key is held. Modifiers: SUPER (or WIN), SHIFT,
+// CTRL, ALT, in any order and separated any way. Keys use Hyprland's
+// (xkb) names: a-z, 0-9, F1-F24, Return, space, Tab, Escape, left, right,
+// up, down, minus, equal, comma, period, slash, ...
+// Dispatchers (as in Hyprland):
+//   exec <command line>    killactive          togglefloating
+//   fullscreen [0|1]       (0: whole monitor, over the bar; 1: maximise)
+//   movefocus l|r|u|d      swapwindow l|r|u|d  togglesplit
+//   resizeactive <dx> <dy> (pixels; grows/shrinks the window's split)
+struct Binding
+{
+    quint32 modifiers = 0; // MOD_ALT | MOD_CONTROL | MOD_SHIFT | MOD_WIN
+    quint32 key = 0;       // virtual-key code
+    bool repeat = false;
+    QString dispatcher;
+    QString argument;
+    QString description;
+    QString name;          // e.g. "SUPER+SHIFT+left", for the log
+};
+
 // visor-wm's settings, read from a hyprland.conf-style file (wm.conf).
 // Supported:
 //   # comments (## is a literal #)
@@ -33,6 +56,7 @@ struct WindowRule
 //   general:gaps_in, gaps_out, border_size, col.active_border, col.inactive_border
 //   dwindle:default_split_ratio, preserve_split, force_split
 //   windowrule = float|tile, class:<regex>, title:<regex>, exe:<regex>
+//   bind, bindd, binde, ... (see Binding)
 // Unknown keys are reported, not fatal.
 struct Config
 {
@@ -45,6 +69,7 @@ struct Config
     quint32 inactiveBorder = 0x595959; // 0xRRGGBB
     DwindleLayout::Options dwindle;
     QList<WindowRule> rules;
+    QList<Binding> bindings;
 
     QStringList errors; // "line N: message"
 

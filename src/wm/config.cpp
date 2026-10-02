@@ -6,6 +6,8 @@
 #include <QFileInfo>
 #include <QHash>
 
+#include <windows.h>
+
 #include <algorithm>
 
 namespace visor::wm {
@@ -116,6 +118,158 @@ bool parseRule(const QString &value, WindowRule *rule, QString *error)
     return true;
 }
 
+// Hyprland's modifier names; like Hyprland, matched as substrings so
+// "SUPER SHIFT", "SUPER_SHIFT" and "SUPERSHIFT" all work.
+bool parseModifiers(const QString &text, quint32 *out)
+{
+    QString rest = text.toUpper();
+    quint32 mods = 0;
+    const struct
+    {
+        const char *name;
+        quint32 flag;
+    } names[] = {
+        {"SUPER", MOD_WIN},     {"WIN", MOD_WIN},      {"MOD4", MOD_WIN}, {"META", MOD_WIN}, {"SHIFT", MOD_SHIFT},
+        {"CONTROL", MOD_CONTROL}, {"CTRL", MOD_CONTROL}, {"ALT", MOD_ALT}, {"MOD1", MOD_ALT},
+    };
+    for (const auto &n : names) {
+        const QString name = QString::fromLatin1(n.name);
+        if (rest.contains(name)) {
+            mods |= n.flag;
+            rest.remove(name);
+        }
+    }
+    // Whatever is left must be separators.
+    for (QChar ch : std::as_const(rest)) {
+        if (!ch.isSpace() && ch != QLatin1Char('_') && ch != QLatin1Char('+'))
+            return false;
+    }
+    *out = mods;
+    return true;
+}
+
+bool parseKey(const QString &text, quint32 *out)
+{
+    const QString key = text.trimmed().toLower();
+    if (key.size() == 1) {
+        const QChar ch = key[0];
+        if ((ch >= QLatin1Char('a') && ch <= QLatin1Char('z')) || (ch >= QLatin1Char('0') && ch <= QLatin1Char('9'))) {
+            *out = ch.toUpper().unicode();
+            return true;
+        }
+    }
+    if (key.size() >= 2 && key[0] == QLatin1Char('f')) {
+        bool ok = false;
+        const int n = key.mid(1).toInt(&ok);
+        if (ok && n >= 1 && n <= 24) {
+            *out = VK_F1 + n - 1;
+            return true;
+        }
+    }
+    static const QHash<QString, quint32> names{
+        {QStringLiteral("return"), VK_RETURN},      {QStringLiteral("enter"), VK_RETURN},
+        {QStringLiteral("space"), VK_SPACE},        {QStringLiteral("tab"), VK_TAB},
+        {QStringLiteral("escape"), VK_ESCAPE},      {QStringLiteral("backspace"), VK_BACK},
+        {QStringLiteral("delete"), VK_DELETE},      {QStringLiteral("insert"), VK_INSERT},
+        {QStringLiteral("home"), VK_HOME},          {QStringLiteral("end"), VK_END},
+        {QStringLiteral("prior"), VK_PRIOR},        {QStringLiteral("page_up"), VK_PRIOR},
+        {QStringLiteral("next"), VK_NEXT},          {QStringLiteral("page_down"), VK_NEXT},
+        {QStringLiteral("left"), VK_LEFT},          {QStringLiteral("right"), VK_RIGHT},
+        {QStringLiteral("up"), VK_UP},              {QStringLiteral("down"), VK_DOWN},
+        {QStringLiteral("print"), VK_SNAPSHOT},     {QStringLiteral("minus"), VK_OEM_MINUS},
+        {QStringLiteral("equal"), VK_OEM_PLUS},     {QStringLiteral("comma"), VK_OEM_COMMA},
+        {QStringLiteral("period"), VK_OEM_PERIOD},  {QStringLiteral("slash"), VK_OEM_2},
+        {QStringLiteral("grave"), VK_OEM_3},        {QStringLiteral("semicolon"), VK_OEM_1},
+        {QStringLiteral("apostrophe"), VK_OEM_7},   {QStringLiteral("bracketleft"), VK_OEM_4},
+        {QStringLiteral("bracketright"), VK_OEM_6}, {QStringLiteral("backslash"), VK_OEM_5},
+    };
+    const auto it = names.constFind(key);
+    if (it == names.cend())
+        return false;
+    *out = *it;
+    return true;
+}
+
+bool isDirection(const QString &arg)
+{
+    return arg == QLatin1String("l") || arg == QLatin1String("r") || arg == QLatin1String("u")
+           || arg == QLatin1String("d");
+}
+
+bool isInt(const QString &s)
+{
+    bool ok = false;
+    s.toInt(&ok);
+    return ok;
+}
+
+// `flags` is what follows "bind" in the key: d (description), e (repeat).
+bool parseBinding(const QString &flags, const QString &value, Binding *binding, QString *error)
+{
+    for (QChar f : flags) {
+        if (f != QLatin1Char('d') && f != QLatin1Char('e')) {
+            *error = QStringLiteral("unsupported bind flag '%1' (supported: d, e)").arg(f);
+            return false;
+        }
+    }
+    const bool described = flags.contains(QLatin1Char('d'));
+    binding->repeat = flags.contains(QLatin1Char('e'));
+
+    // The argument is everything after the dispatcher, commas included
+    // (exec command lines may contain them).
+    const qsizetype fixed = described ? 4 : 3;
+    QStringList parts = value.split(QLatin1Char(','));
+    if (parts.size() < fixed) {
+        *error = described ? QStringLiteral("expected bindd = MODS, key, description, dispatcher[, arg]")
+                           : QStringLiteral("expected bind = MODS, key, dispatcher[, arg]");
+        return false;
+    }
+    const QString argument = parts.mid(fixed).join(QLatin1Char(',')).trimmed();
+    parts = parts.mid(0, fixed);
+    for (QString &p : parts)
+        p = p.trimmed();
+
+    if (!parseModifiers(parts[0], &binding->modifiers)) {
+        *error = QStringLiteral("unknown modifiers \"%1\"").arg(parts[0]);
+        return false;
+    }
+    if (!parseKey(parts[1], &binding->key)) {
+        *error = QStringLiteral("unknown key \"%1\"").arg(parts[1]);
+        return false;
+    }
+    if (described)
+        binding->description = parts[2];
+    binding->dispatcher = parts[fixed - 1].toLower();
+    binding->argument = argument;
+    const QString mods = parts[0].simplified().replace(QLatin1Char(' '), QLatin1Char('+'));
+    binding->name = mods.isEmpty() ? parts[1] : mods + QLatin1Char('+') + parts[1];
+
+    const QString &d = binding->dispatcher;
+    const QString arg = argument.toLower();
+    bool ok = true;
+    if (d == QLatin1String("exec")) {
+        ok = !argument.isEmpty();
+    } else if (d == QLatin1String("killactive") || d == QLatin1String("togglefloating")
+               || d == QLatin1String("togglesplit")) {
+        ok = true;
+    } else if (d == QLatin1String("fullscreen")) {
+        ok = arg.isEmpty() || arg == QLatin1String("0") || arg == QLatin1String("1");
+    } else if (d == QLatin1String("movefocus") || d == QLatin1String("swapwindow")) {
+        ok = isDirection(arg);
+    } else if (d == QLatin1String("resizeactive")) {
+        const QStringList xy = arg.split(QLatin1Char(' '), Qt::SkipEmptyParts);
+        ok = xy.size() == 2 && isInt(xy[0]) && isInt(xy[1]);
+    } else {
+        *error = QStringLiteral("unknown dispatcher \"%1\"").arg(d);
+        return false;
+    }
+    if (!ok) {
+        *error = QStringLiteral("bad argument for %1: \"%2\"").arg(d, argument);
+        return false;
+    }
+    return true;
+}
+
 } // namespace
 
 bool WindowRule::matches(const QString &cls, const QString &windowTitle, const QString &exeName) const
@@ -210,6 +364,14 @@ Config Config::parse(const QString &text)
             ok = parseInt(value, &force) && force >= 0 && force <= 2;
             if (ok)
                 config.dwindle.forceSplit = force;
+        } else if (key.startsWith(QLatin1String("bind"))) {
+            Binding binding;
+            QString error;
+            if (parseBinding(key.mid(4), value, &binding, &error))
+                config.bindings.append(binding);
+            else
+                fail(error);
+            continue;
         } else if (key == QLatin1String("windowrule") || key == QLatin1String("windowrulev2")) {
             WindowRule rule;
             QString error;

@@ -33,6 +33,15 @@ void CALLBACK cloakEventProc(HWINEVENTHOOK, DWORD, HWND hwnd, LONG idObject, LON
         t->reevaluate(reinterpret_cast<quintptr>(hwnd));
 }
 
+void CALLBACK locationEventProc(HWINEVENTHOOK, DWORD, HWND hwnd, LONG idObject, LONG idChild, DWORD, DWORD)
+{
+    // Fires for every window move (and caret), so only the cheapest checks.
+    if (idObject != OBJID_WINDOW || idChild != CHILDID_SELF || hwnd != GetForegroundWindow())
+        return;
+    for (Tasks *t : instances())
+        t->foregroundMoved();
+}
+
 LRESULT CALLBACK windowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
     if (msg == WM_NCCREATE) {
@@ -137,6 +146,12 @@ Tasks::Tasks(bool asShell, QObject *parent)
 
     // Cloaking hides windows without the shell hook noticing: UWP frames
     // before their content arrives, and windows on other virtual desktops.
+    // Only the shell hides bars for fullscreen apps (AppBars), so only it
+    // needs to see the foreground window change size.
+    if (asShell) {
+        m_locationHook = SetWinEventHook(EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE, nullptr,
+                                         locationEventProc, 0, 0, WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
+    }
     m_cloakHook = SetWinEventHook(EVENT_OBJECT_CLOAKED, EVENT_OBJECT_UNCLOAKED, nullptr, cloakEventProc, 0, 0,
                                   WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
 
@@ -158,6 +173,8 @@ Tasks::~Tasks()
     instances().removeOne(this);
     if (m_cloakHook)
         UnhookWinEvent(static_cast<HWINEVENTHOOK>(m_cloakHook));
+    if (m_locationHook)
+        UnhookWinEvent(static_cast<HWINEVENTHOOK>(m_locationHook));
     if (m_hwnd) {
         DeregisterShellHookWindow(static_cast<HWND>(m_hwnd));
         DestroyWindow(static_cast<HWND>(m_hwnd));

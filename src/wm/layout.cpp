@@ -135,6 +135,61 @@ void DwindleLayout::remove(Window window)
         grandparent->second = std::move(sibling);
 }
 
+void DwindleLayout::swap(Window a, Window b)
+{
+    Node *na = find(m_root.get(), a);
+    Node *nb = find(m_root.get(), b);
+    if (na && nb)
+        std::swap(na->window, nb->window);
+}
+
+void DwindleLayout::replace(Window window, Window with)
+{
+    if (Node *node = find(m_root.get(), window))
+        node->window = with;
+}
+
+void DwindleLayout::toggleSplit(Window window)
+{
+    Node *leaf = find(m_root.get(), window);
+    if (leaf && leaf->parent)
+        leaf->parent->sideBySide = !leaf->parent->sideBySide;
+}
+
+bool DwindleLayout::resize(Window window, int dx, int dy)
+{
+    Node *leaf = find(m_root.get(), window);
+    if (!leaf)
+        return false;
+
+    bool changed = false;
+    const auto adjust = [&](bool sideBySide, int delta) {
+        if (!delta)
+            return;
+        // The nearest split in that direction: moving its divider changes
+        // this window's size.
+        Node *child = leaf;
+        Node *split = leaf->parent;
+        while (split && split->sideBySide != sideBySide) {
+            child = split;
+            split = split->parent;
+        }
+        if (!split)
+            return;
+        const int total = sideBySide ? split->box.width() : split->box.height();
+        if (total <= 0)
+            return;
+        const double firstSize = total * std::clamp(split->ratio, 0.1, 1.9) / 2;
+        const bool inFirst = split->first.get() == child;
+        const double newFirst = firstSize + (inFirst ? delta : -delta);
+        split->ratio = std::clamp(2 * newFirst / total, 0.1, 1.9);
+        changed = true;
+    };
+    adjust(true, dx);
+    adjust(false, dy);
+    return changed;
+}
+
 void DwindleLayout::computeBoxes(Node *node, const Rect &box, const Options &options)
 {
     if (!node)

@@ -36,13 +36,17 @@ public:
     std::intptr_t handleMessage(void *window, unsigned msg, std::uintptr_t wParam, std::intptr_t lParam);
     // Called from the WinEvent hook when a window is cloaked or uncloaked.
     void reevaluate(quintptr hwnd);
+    // Called from the WinEvent hook when the foreground window moved or resized.
+    void foregroundMoved() { emit fullscreenChanged(); }
 
 signals:
     void added(const visor::Tasks::Task &task);
     void changed(const visor::Tasks::Task &task);
     void removed(quintptr hwnd);
     void activated(quintptr hwnd);
-    // A window entered or left fullscreen (HSHELL_FULLSCREENENTER/EXIT).
+    // A window may have entered or left fullscreen: HSHELL_FULLSCREENENTER/
+    // EXIT, or the foreground window moved or resized (e.g. visor-wm's
+    // fullscreen, or a borderless game resizing itself).
     void fullscreenChanged();
 
 private:
@@ -52,6 +56,7 @@ private:
 
     void *m_hwnd = nullptr;
     void *m_cloakHook = nullptr;
+    void *m_locationHook = nullptr;
     unsigned m_shellHookMessage = 0;
     QList<Task> m_tasks; // in the order windows appeared
     quintptr m_active = 0;

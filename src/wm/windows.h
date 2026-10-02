@@ -36,6 +36,19 @@ bool exists(quintptr hwnd);
 
 // Restores a maximised window without activating it.
 void unmaximize(quintptr hwnd);
+// Maximises the window, or restores it if it already is.
+void toggleMaximized(quintptr hwnd);
+
+// The visible frame (without the invisible resize borders).
+Rect frameRect(quintptr hwnd);
+quintptr foreground();
+// Makes the window the foreground window. visor-wm may do this while it
+// handles a hotkey: the process that received the last input can.
+bool focus(quintptr hwnd);
+// Asks the window to close, as its close button would.
+void close(quintptr hwnd);
+// Brings the window to the top of the z-order without activating it.
+void raise(quintptr hwnd);
 
 // Moves and sizes the window so its *visible* frame fills `rect`. Windows 10+
 // windows have invisible resize borders around the visible frame; those are

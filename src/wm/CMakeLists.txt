@@ -5,9 +5,11 @@ qt_add_executable(visor-wm WIN32
     ../common/log.h ../common/log.cpp
     main.cpp
     config.h config.cpp
+    keyhook.h keyhook.cpp
     layout.h layout.cpp
     manager.h manager.cpp
     windows.h windows.cpp
+    ../common/launch.h ../common/launch.cpp
 )
 target_include_directories(visor-wm PRIVATE ${PROJECT_SOURCE_DIR}/src)
 target_compile_definitions(visor-wm PRIVATE
@@ -22,6 +24,8 @@ target_link_libraries(visor-wm PRIVATE
     user32
     advapi32
     dwmapi
+    shell32
+    ole32
 )
 # The Qt runtime it needs (Qt6Core) is deployed next to visor-shell, and
 # wm.conf ships in the bar's config folder (the visor-config target).

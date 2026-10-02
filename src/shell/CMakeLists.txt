@@ -5,7 +5,7 @@ qt_add_executable(visor-shell WIN32
     ../common/linkprotocol.h
     main.cpp
     ../common/log.h ../common/log.cpp
-    launch.h launch.cpp
+    ../common/launch.h ../common/launch.cpp
     supervisor.h supervisor.cpp
     desktopwindow.h desktopwindow.cpp
     hotkeys.h hotkeys.cpp

@@ -5,7 +5,7 @@ Omarchy-style desktop: tiling, keyboard-driven, themeable. Native C++ and Qt,
 event-driven, small. It can run as a plain app under Explorer, or replace
 `explorer.exe` as the Windows shell.
 
-Status: **phase 3a**: Hyprland-style tiling (`visor-wm`) on top of phase 2's desktop, wallpaper, task list and tray in Visor, app bars and work areas, fullscreen detection and Visor supervision. Phase 0 results (what breaks without Explorer) are in [docs/phase0-compat.md](docs/phase0-compat.md).
+Status: **phase 3b**: Hyprland-style tiling and key bindings (`visor-wm`) on top of phase 2's desktop, wallpaper, task list and tray in Visor, app bars and work areas, fullscreen detection and Visor supervision. Phase 0 results (what breaks without Explorer) are in [docs/phase0-compat.md](docs/phase0-compat.md).
 See [docs/design.md](docs/design.md) for the architecture and plan.
 
 | Program | Source | What it is |
@@ -97,7 +97,24 @@ pwsh etc/vm/input.ps1 -Key ctrl+alt+r     # press keys inside the VM
 
 Config is `wm.conf`, a subset of `hyprland.conf`, and saving it applies it at once. It is looked up like Visor's config: `--config`, `%VISOR_WM_CONFIG%`, `~/.config/visor/wm.conf`, then [`src/bar/config/wm.conf`](src/bar/config/wm.conf) (debug builds), then `config/wm.conf` next to the exe. The default file documents every setting: gaps, border colours, the dwindle options and window rules such as `windowrule = float, exe:^notepad\.exe$`.
 
-Keyboard control (Super+arrows, Super+V, F, W, Return…) and workspaces come next, in phases 3b and 3c.
+### Keys
+
+The default bindings follow Omarchy. They are all `bind` lines in `wm.conf`, in Hyprland's syntax (`bind = SUPER SHIFT, left, swapwindow, l`), so you can change them and save to apply.
+
+| Keys | Action |
+| --- | --- |
+| Super+Return | Terminal (`wt.exe`) |
+| Super+E | File Explorer |
+| Super+W | Close the window |
+| Super+V | Float or tile the window |
+| Super+F | Fullscreen, covering the bar |
+| Super+Alt+F | Maximise, keeping the bar |
+| Super+J | Switch the window's split between side by side and stacked |
+| Super+arrows | Move focus |
+| Super+Shift+arrows | Swap the window with its neighbour |
+| Super+minus / equal | Narrower / wider (add Shift for shorter / taller) |
+
+Windows reserves some Win-key combinations even without Explorer (Win+arrows, Win+Shift+arrows, Win+Return, Win+=), so `visor-wm` catches those with a keyboard hook instead of a hotkey. One limit comes with that: they don't work while an app running as administrator has focus. Win+L always locks the screen. Workspaces come next, in phase 3c.
 
 ## Phase 0 hotkeys
 

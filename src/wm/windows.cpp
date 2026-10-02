@@ -218,6 +218,43 @@ void unmaximize(quintptr hwnd)
     ShowWindowAsync(toHwnd(hwnd), SW_SHOWNOACTIVATE);
 }
 
+void toggleMaximized(quintptr hwnd)
+{
+    ShowWindowAsync(toHwnd(hwnd), IsZoomed(toHwnd(hwnd)) ? SW_RESTORE : SW_MAXIMIZE);
+}
+
+Rect frameRect(quintptr hwnd)
+{
+    RECT frame{};
+    if (FAILED(DwmGetWindowAttribute(toHwnd(hwnd), DWMWA_EXTENDED_FRAME_BOUNDS, &frame, sizeof(frame))))
+        GetWindowRect(toHwnd(hwnd), &frame);
+    return {int(frame.left), int(frame.top), int(frame.right), int(frame.bottom)};
+}
+
+quintptr foreground()
+{
+    return reinterpret_cast<quintptr>(GetForegroundWindow());
+}
+
+bool focus(quintptr window)
+{
+    const HWND hwnd = toHwnd(window);
+    if (IsIconic(hwnd))
+        ShowWindowAsync(hwnd, SW_RESTORE);
+    return SetForegroundWindow(hwnd);
+}
+
+void close(quintptr hwnd)
+{
+    PostMessageW(toHwnd(hwnd), WM_CLOSE, 0, 0);
+}
+
+void raise(quintptr hwnd)
+{
+    SetWindowPos(toHwnd(hwnd), HWND_TOP, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_ASYNCWINDOWPOS);
+}
+
 bool moveTo(quintptr window, const Rect &target)
 {
     const HWND hwnd = toHwnd(window);
