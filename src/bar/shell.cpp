@@ -33,7 +33,7 @@ Shell::Shell(QString configPath, QObject *parent)
     // coalesce them into one reload.
     m_reloadTimer.setSingleShot(true);
     m_reloadTimer.setInterval(150);
-    connect(&m_reloadTimer, &QTimer::timeout, this, &Shell::load);
+    connect(&m_reloadTimer, &QTimer::timeout, this, &Shell::reloadIfChanged);
 
     const auto changed = [this] { m_reloadTimer.start(); };
     connect(&m_watcher, &QFileSystemWatcher::fileChanged, this, changed);
@@ -95,6 +95,18 @@ void Shell::load()
                              .arg(timer.elapsed());
 }
 
+void Shell::reloadIfChanged()
+{
+    if (snapshot(qmlFiles()) == m_snapshot) {
+        // Something else in the folder changed (e.g. wm.conf was saved).
+        // Re-arm anyway: an atomic save of a watched file drops it from the
+        // watcher even when its contents end up the same.
+        watchConfigDir();
+        return;
+    }
+    load();
+}
+
 void Shell::watchConfigDir()
 {
     const QStringList files = m_watcher.files();
@@ -104,16 +116,44 @@ void Shell::watchConfigDir()
     if (!dirs.isEmpty())
         m_watcher.removePaths(dirs);
 
+    // Directories are watched for added, removed and renamed files.
     QStringList paths{m_configDir};
-    QDirIterator it(m_configDir, QDir::Files | QDir::Dirs | QDir::NoDotAndDotDot, QDirIterator::Subdirectories);
+    QDirIterator it(m_configDir, QDir::Dirs | QDir::NoDotAndDotDot, QDirIterator::Subdirectories);
+    while (it.hasNext())
+        paths << it.next();
+    const QStringList qml = qmlFiles();
+    paths << qml;
+    m_watcher.addPaths(paths);
+    m_snapshot = snapshot(qml);
+}
+
+QStringList Shell::qmlFiles() const
+{
+    QStringList files;
+    QDirIterator it(m_configDir, QDir::Files, QDirIterator::Subdirectories);
     while (it.hasNext()) {
         const QFileInfo info = it.nextFileInfo();
-        if (info.isDir() || info.suffix().compare("qml", Qt::CaseInsensitive) == 0
+        if (info.suffix().compare("qml", Qt::CaseInsensitive) == 0
             || info.suffix().compare("js", Qt::CaseInsensitive) == 0
             || info.suffix().compare("mjs", Qt::CaseInsensitive) == 0
             || info.fileName().compare("qmldir", Qt::CaseInsensitive) == 0) {
-            paths << info.absoluteFilePath();
+            files << info.absoluteFilePath();
         }
     }
-    m_watcher.addPaths(paths);
+    return files;
+}
+
+QStringList Shell::snapshot(const QStringList &files) const
+{
+    QStringList entries;
+    entries.reserve(files.size());
+    for (const QString &path : files) {
+        const QFileInfo info(path);
+        entries << QStringLiteral("%1|%2|%3")
+                       .arg(path)
+                       .arg(info.lastModified().toMSecsSinceEpoch())
+                       .arg(info.size());
+    }
+    entries.sort();
+    return entries;
 }
