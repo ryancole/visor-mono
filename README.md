@@ -5,7 +5,7 @@ Omarchy-style desktop: tiling, keyboard-driven, themeable. Native C++ and Qt,
 event-driven, small. It can run as a plain app under Explorer, or replace
 `explorer.exe` as the Windows shell.
 
-Status: **phase 3c**: Hyprland-style tiling, key bindings and Windows-style virtual desktops (`visor-wm`) on top of phase 2's desktop, wallpaper, task list and tray in Visor, app bars and work areas, fullscreen detection and Visor supervision. Phase 0 results (what breaks without Explorer) are in [docs/phase0-compat.md](docs/phase0-compat.md).
+Status: **phase 3d**: Hyprland-style tiling, key bindings and Windows-style virtual desktops (`visor-wm`) on top of phase 2's desktop, wallpaper, task list and tray in Visor, app bars and work areas, fullscreen detection and Visor supervision. Phase 0 results (what breaks without Explorer) are in [docs/phase0-compat.md](docs/phase0-compat.md).
 See [docs/design.md](docs/design.md) for the architecture and plan.
 
 | Program | Source | What it is |
@@ -94,6 +94,8 @@ pwsh etc/vm/input.ps1 -Key ctrl+alt+r     # press keys inside the VM
 - **Maximise and minimise still work:** a maximised window keeps its tile and goes back into it when restored. A minimised window leaves the layout until it comes back.
 - **Dragging** a tiled window snaps it back into its tile, or into the layout of the monitor it was dropped on.
 - **Borders:** the focused window gets `col.active_border` and the rest `col.inactive_border` (Windows 11 draws them 1 px wide).
+- **Windows that won't shrink:** some apps have a minimum size (Windows Terminal stops at about 465 px wide). When a window ends up bigger than its tile, `visor-wm` remembers that size and gives the window that much room, kept on-screen, so it covers part of its neighbour instead of running off the edge. Resizing stops there too.
+- **Multiple monitors:** each monitor has its own layout. New windows tile on the monitor they open on. Gaps are logical pixels, so they scale with each monitor's DPI, as in Hyprland. Focus and swapping cross monitors. Where there's no window to swap with, Super+Shift+arrows moves the window to the monitor in that direction, like Win+Shift+Left/Right in Windows (floating windows too). Windows on a monitor that's unplugged move to the primary one. *This part hasn't been tested with more than one monitor yet.*
 
 Config is `wm.conf`, a subset of `hyprland.conf`, and saving it applies it at once. It is looked up like Visor's config: `--config`, `%VISOR_WM_CONFIG%`, `~/.config/visor/wm.conf`, then [`src/bar/config/wm.conf`](src/bar/config/wm.conf) (debug builds), then `config/wm.conf` next to the exe. The default file documents every setting: gaps, border colours, the dwindle options and window rules such as `windowrule = float, exe:^notepad\.exe$`.
 
@@ -131,7 +133,7 @@ Windows 11's virtual desktops live in Explorer, so they're gone in replace mode.
 - Visor's task list shows only the current desktop's windows, which is Windows' default.
 - Once there are two or more desktops, the bar shows them as numbered pills. Click one to switch, or scroll over them.
 - Windows has no key for moving a window to another desktop (it uses Task View), so the last row is our addition.
-- Windows on other desktops are hidden. If `visor-wm` stops unexpectedly, the next one shows them again, so no window is ever lost.
+- Windows on other desktops are hidden. Desktops survive `visor-wm` restarting (after a crash, a redeploy, or visor-shell restarting): the next `visor-wm` picks up the desktops and their hidden windows. If the session goes back to Explorer (Ctrl+Alt+Q, or visor-shell not coming back), every window is shown first, so none is ever lost.
 
 
 ## Phase 0 hotkeys

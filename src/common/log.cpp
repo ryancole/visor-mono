@@ -17,11 +17,10 @@ namespace {
 
 constexpr qint64 kMaxLogBytes = 1 << 20;
 
-QFile &logFile()
-{
-    static QFile file;
-    return file;
-}
+// Opened for appending only (FILE_APPEND_DATA), so each write lands at the
+// end of the file even when another process appends to it too: an exiting
+// visor-wm and its successor both write wm.log for a moment.
+HANDLE g_log = INVALID_HANDLE_VALUE;
 
 QMutex &logMutex()
 {
@@ -41,10 +40,10 @@ void handler(QtMsgType type, const QMessageLogContext &, const QString &message)
         std::fputs(line.toLocal8Bit().constData(), stderr);
 
     QMutexLocker lock(&logMutex());
-    QFile &file = logFile();
-    if (file.isOpen()) {
-        file.write(line.toUtf8());
-        file.flush();
+    if (g_log != INVALID_HANDLE_VALUE) {
+        const QByteArray utf8 = line.toUtf8();
+        DWORD written = 0;
+        WriteFile(g_log, utf8.constData(), DWORD(utf8.size()), &written, nullptr);
     }
 }
 
@@ -61,15 +60,17 @@ void installLogHandler(const QString &name)
     const QDir dir(dataDir() + QStringLiteral("/logs"));
     dir.mkpath(QStringLiteral("."));
 
-    QFile &file = logFile();
-    file.setFileName(dir.filePath(name + QStringLiteral(".log")));
-    if (file.size() > kMaxLogBytes)
-        file.remove();
-    const bool opened = file.open(QIODevice::Append | QIODevice::Text);
+    const QString path = QDir::toNativeSeparators(dir.filePath(name + QStringLiteral(".log")));
+    if (QFile(path).size() > kMaxLogBytes)
+        QFile::remove(path);
+    g_log = CreateFileW(reinterpret_cast<const wchar_t *>(path.utf16()), FILE_APPEND_DATA,
+                        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_ALWAYS,
+                        FILE_ATTRIBUTE_NORMAL, nullptr);
+    const DWORD error = GetLastError();
 
     qInstallMessageHandler(handler);
-    if (!opened)
-        qWarning() << "cannot open log file" << file.fileName() << file.errorString();
+    if (g_log == INVALID_HANDLE_VALUE)
+        qWarning() << "cannot open log file" << path << "error" << error;
 }
 
 } // namespace visor

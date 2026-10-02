@@ -5,9 +5,13 @@
 //   visor-wm [--config <wm.conf>] [--shell-pid <pid>]
 //
 // With --shell-pid it exits when that process does, so a restarted shell
-// starts a fresh visor-wm rather than finding a stale one.
+// starts a fresh visor-wm rather than finding a stale one. If a new shell
+// appears within a few seconds (visor-session restarted it), windows on other
+// desktops stay hidden and are handed over to the visor-wm it starts;
+// otherwise (e.g. the session went back to Explorer) every window is shown.
 
 #include "common/exitcodes.h"
+#include "common/linkprotocol.h"
 #include "common/log.h"
 #include "wm/config.h"
 #include "wm/manager.h"
@@ -15,6 +19,7 @@
 #include <QCommandLineParser>
 #include <QCoreApplication>
 #include <QDateTime>
+#include <QElapsedTimer>
 #include <QDebug>
 #include <QFileInfo>
 #include <QFileSystemWatcher>
@@ -31,6 +36,8 @@ namespace {
 // shutting down, so wait a moment for the instance mutex.
 constexpr DWORD kInstanceWaitMs = 3'000;
 constexpr int kReloadDelayMs = 150;
+constexpr int kNewShellWaitMs = 5'000;
+constexpr int kNewShellPollMs = 100;
 
 visor::wm::Config loadConfig(const QString &path)
 {
@@ -88,17 +95,35 @@ int main(int argc, char *argv[])
             return 0;
         }
     }
-    std::unique_ptr<QWinEventNotifier> shellExited;
-    if (shell) {
-        shellExited = std::make_unique<QWinEventNotifier>(shell);
-        QObject::connect(shellExited.get(), &QWinEventNotifier::activated, &app, [] {
-            qInfo() << "visor-shell exited; stopping";
-            QCoreApplication::quit();
-        });
-    }
 
     const QString configPath = visor::wm::resolveConfigPath(parser.value(configOption));
-    visor::wm::WindowManager manager(loadConfig(configPath));
+    // Destroyed explicitly before the instance mutex is released (below), so
+    // its hand-over is written before the next visor-wm reads it.
+    auto manager = std::make_unique<visor::wm::WindowManager>(loadConfig(configPath));
+
+    std::unique_ptr<QWinEventNotifier> shellExited;
+    QTimer newShellPoll;
+    if (shell) {
+        shellExited = std::make_unique<QWinEventNotifier>(shell);
+        newShellPoll.setInterval(kNewShellPollMs);
+        QElapsedTimer waited;
+        QObject::connect(shellExited.get(), &QWinEventNotifier::activated, &app, [&] {
+            shellExited->setEnabled(false);
+            qInfo() << "visor-shell exited; waiting briefly for a new one";
+            waited.start();
+            newShellPoll.start();
+        });
+        QObject::connect(&newShellPoll, &QTimer::timeout, &app, [&] {
+            if (FindWindowW(visor::link::kShellLinkClass, nullptr)) {
+                qInfo() << "a new visor-shell is up; handing over";
+                manager->handOver();
+                QCoreApplication::quit();
+            } else if (waited.elapsed() > kNewShellWaitMs) {
+                qInfo() << "no new visor-shell; stopping";
+                QCoreApplication::quit();
+            }
+        });
+    }
 
     // Live reload. Editors often save by replacing the file, which drops it
     // from the watcher, so the folder is watched too and the file re-added.
@@ -123,12 +148,13 @@ int main(int argc, char *argv[])
                 return; // another file in the folder changed
             lastModified = modified;
             qInfo() << "reloading config";
-            manager.setConfig(loadConfig(configPath));
+            manager->setConfig(loadConfig(configPath));
         });
     }
 
     const int code = app.exec();
     qInfo() << "visor-wm exiting with code" << code;
+    manager.reset();
     // The notifier's thread-pool wait uses the handle until it is destroyed.
     shellExited.reset();
     if (shell)

@@ -26,6 +26,7 @@ target_link_libraries(visor-wm PRIVATE
     dwmapi
     shell32
     ole32
+    shcore
 )
 # The Qt runtime it needs (Qt6Core) is deployed next to visor-shell, and
 # wm.conf ships in the bar's config folder (the visor-config target).

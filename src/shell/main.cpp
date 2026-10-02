@@ -281,8 +281,11 @@ int main(int argc, char *argv[])
                 break;
             case visor::Hotkeys::QuitToExplorer:
                 qInfo() << "quit requested";
-                if (mode == Mode::Replace)
+                if (mode == Mode::Replace) {
                     link.stopVisor();
+                    // Shows windows hidden on other desktops before Explorer comes.
+                    link.sendToWm({{QStringLiteral("type"), QStringLiteral("quit")}});
+                }
                 // As the shell, ask visor-session to hand over to Explorer.
                 // Hosted, Explorer is already there: just exit.
                 QCoreApplication::exit(mode == Mode::Replace ? visor::exitcode::StartExplorer : 0);

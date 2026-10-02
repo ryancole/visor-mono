@@ -9,6 +9,7 @@
 #include <QList>
 #include <QObject>
 #include <QSet>
+#include <QSize>
 #include <QString>
 #include <QTimer>
 
@@ -31,9 +32,10 @@ namespace visor::wm {
 // so they're gone when visor-shell replaces it): as many as you create,
 // named "Desktop N", each spanning every monitor. Every app window belongs to
 // one; switching hides the old desktop's windows (and the windows they own)
-// and shows the new one's. Windows we hid are recorded in a file, so if
-// visor-wm dies they are shown again by the next visor-wm instead of being
-// lost; a clean exit shows them straight away.
+// and shows the new one's. The desktops and the windows hidden on them are
+// recorded in a file, so a visor-wm started after this one died (or was
+// replaced, see handOver) picks them up again instead of losing them; a
+// clean exit shows every window straight away.
 //
 // Key bindings from the config are global hotkeys (RegisterHotKey) on the
 // hidden window, or, for keys Windows reserves, caught by a KeyHook; each
@@ -44,9 +46,13 @@ class WindowManager : public QObject
 
 public:
     explicit WindowManager(Config config, QObject *parent = nullptr);
-    // Shows windows hidden on other desktops and puts window border colours
-    // back to the system default.
+    // Shows windows hidden on other desktops (unless handed over) and puts
+    // window border colours back to the system default.
     ~WindowManager() override;
+
+    // On exit, leave windows on other desktops hidden and recorded, for the
+    // visor-wm a restarted visor-shell starts next.
+    void handOver() { m_handOver = true; }
 
     // Applies a reloaded config: gaps, layout options, colours and key
     // bindings take effect at once. Rules apply to windows as they open, as
@@ -62,6 +68,7 @@ private:
     {
         Rect full; // physical px
         Rect work; // without app bars
+        double scale = 1.0; // DPI / 96: gaps are in logical px, as in Hyprland
         bool primary = false;
     };
     struct Workspace // one desktop's windows on one monitor
@@ -99,9 +106,16 @@ private:
     void manage(quintptr hwnd);
     void unmanage(quintptr hwnd);
     void moveToMonitor(quintptr hwnd, const QString &monitor);
+    // The monitor next to `monitor` in `direction`, or empty.
+    QString monitorInDirection(const QString &monitor, Direction direction) const;
 
     void arrange(const QString &monitor);
     void arrangeAll();
+    // Learns minimum sizes: a window that ended up bigger than we asked
+    // won't go smaller, so later layouts give it that much room (kept
+    // on-screen) instead of letting it spill over the edge. Returns true if
+    // anything was learnt.
+    bool learnMinimumSizes();
     // Some apps place their own window just after showing it (restoring a
     // saved position); lay out again once they've settled.
     void settleSoon();
@@ -119,8 +133,8 @@ private:
     void hideWindows(const QSet<quintptr> &roots, Desktop *desktop);
     void showWindows(Desktop *desktop);
     void focusDesktop(Desktop *desktop);
-    void saveHidden() const;
-    void restoreHidden();
+    void saveState() const;
+    void restoreState();
     QJsonObject desktopState() const;
     void sendState();
 
@@ -150,6 +164,9 @@ private:
     QSet<quintptr> m_expectShow;                 // events aren't taken for the app's
     QHash<quintptr, Managed> m_managed;
     QHash<quintptr, Rect> m_tiles;               // each tiled window's tile, from the last arrange
+    QHash<quintptr, Rect> m_placed;              // where we last put it (the tile, or more if it needs it)
+    QHash<quintptr, QSize> m_minimumSize;        // learnt by learnMinimumSizes
+    bool m_handOver = false;
     QHash<quintptr, bool> m_tileOverride;        // togglefloating: true = tile, false = float
     QHash<quintptr, Rect> m_floatFullscreen;     // floating windows in fullscreen 0: their old frame
     qsizetype m_registeredBindings = 0;
@@ -165,6 +182,7 @@ private:
     // they're done.
     QTimer m_recolorTimer;
     QTimer m_stateTimer; // coalesces desktop state updates to Visor
+    QTimer m_learnTimer; // after a layout: learnMinimumSizes once windows have resized
 };
 
 } // namespace visor::wm
