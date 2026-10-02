@@ -174,6 +174,12 @@ std::intptr_t DesktopWindow::handleMessage(unsigned msg, std::uintptr_t wParam, 
         break;
     case WM_CLOSE:
         return 0; // Alt+F4 on the desktop must not close the shell
+    case WM_QUERYENDSESSION:
+        return TRUE; // never in the way of signing out
+    case WM_ENDSESSION:
+        if (wParam)
+            emit sessionEnding();
+        return 0;
     default:
         break;
     }

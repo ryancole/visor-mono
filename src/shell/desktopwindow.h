@@ -30,6 +30,8 @@ public:
 signals:
     // Monitors were added, removed, moved or resized.
     void displayChanged();
+    // The user is signing out or the machine is shutting down (WM_ENDSESSION).
+    void sessionEnding();
 
 private:
     void fitToVirtualScreen();

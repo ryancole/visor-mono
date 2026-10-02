@@ -3,6 +3,7 @@
 #include "services/shelllink.h"
 
 #include <QAbstractListModel>
+#include <QVariantList>
 #include <QtQml/qqmlregistration.h>
 
 // The open app windows (what the taskbar would show), as a list model. Fed by
@@ -57,6 +58,12 @@ public:
     Q_INVOKABLE void minimize(double hwnd);
     // Asks the window to close (WM_CLOSE), like the taskbar's "Close window".
     Q_INVOKABLE void close(double hwnd);
+    // The windows front to back, as Alt+Tab orders them: a list of
+    // {hwnd, title, appName, icon} objects.
+    Q_INVOKABLE QVariantList zOrder() const;
+    // Brings the window forward (restoring it if minimised), whatever is in
+    // front now. For the switcher; call only from a key or click.
+    Q_INVOKABLE void bringToFront(double hwnd);
 
 signals:
     void availableChanged();

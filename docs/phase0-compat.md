@@ -16,7 +16,7 @@ Fill in each result as ✅ works, ❌ broken, or ⚠️ partly works, and add no
 | Winlogon restarts the shell when it dies | Kill `visor-shell` and `visor-session` | ✅ | **AutoRestartShell applies to custom shells too.** Killing `visor-shell` (which owns the shell window) relaunches the HKCU shell almost immediately. Killing only `visor-session` does not. `visor-session` is single-instance so the two restarts don't race |
 | Memory | `Get-Process` | ✅ | Private memory: `visor-session` 1.4 MB, `visor-shell` 2.3 MB, Visor 26 MB |
 | Shift at sign-in falls back to Explorer | Hold Shift while signing in | | |
-| Crash fallback (3 crashes, then Explorer) | Kill `visor-shell` 3× in Task Manager | | |
+| Crash fallback (3 crashes, then Explorer) | Kill `visor-shell` 3× in Task Manager | ✅ | Winlogon relaunched `visor-shell` after each kill (via `visor-session`, which kept its crash count); after the third within a minute it started Explorer, the shell 313 ms later. Visor stayed running as a plain app. Killing Explorer brought our shell back |
 | Ctrl+Alt+Q hands over to Explorer (a full taskbar appears) | Ctrl+Alt+Q | ✅ | Explorer was the shell 0.3 s later. Winlogon relaunched `visor-session` 19 ms after `visor-shell` exited (even with exit code 2); the single-instance check made it exit |
 | Sign out and shut down work | Ctrl+Alt+Del | | |
 | Plain Safe Mode honours the HKCU shell | Advanced startup → Safe Mode | | |
@@ -35,9 +35,9 @@ Fill in each result as ✅ works, ❌ broken, or ⚠️ partly works, and add no
 | Packaged apps through the shell (`shell:AppsFolder\<id>`, or the item's PIDL) | Phase 4 launcher | ❌ | `REGDB_E_CLASSNOTREG` for every packaged app, full-trust ones included; shortcuts launch fine. The launcher runs full-trust packaged apps by their execution alias or executable instead (see design.md §4) |
 | Edge | Run → `msedge` | ✅ | |
 | Toast notification | `New-BurntToastNotification`, or any app's toast | ❌ | Nothing is shown, but the notification platform (WpnUserService) keeps running: every toast lands in `%LOCALAPPDATA%\Microsoft\Windows\Notifications\wpndatabase.db`, and the `UserNotificationListener` API reads them from a plain exe (access was already allowed; the machine-wide consent is Allow). Fixed in phase 6: Visor shows toasts and keeps a history |
-| Alt+Tab shows a switcher | Alt+Tab with 2+ windows open | ⚠️ | Switching works (focus moved from Explorer to Terminal), but nothing is drawn. Not checked while holding Alt |
+| Alt+Tab shows a switcher | Alt+Tab with 2+ windows open | ⚠️ | Switching works (focus moved from Explorer to Terminal), but nothing is drawn. Not checked while holding Alt. Fixed in phase 7: visor-wm's keyboard hook keeps the key (a low-level hook sees it before Windows acts) and Visor draws a switcher with DWM thumbnails |
 | Win+R / Win+E / Win+D / Win+L | Press each | ❌ | Win+R and Win+E do nothing; the letter reaches the focused app. Win+D and Win+L not tested. Free for our own bindings |
-| Win+Shift+S (snip) / Win+V (clipboard) / Win+. (emoji) | Press each | | |
+| Win+Shift+S (snip) / Win+V (clipboard) / Win+. (emoji) | Press each | ❌ | All three are Explorer's (ShellExperienceHost): the letter reaches the focused app instead. Win+V is `visor-wm`'s toggle-floating binding (Omarchy's Super+V), so it is taken anyway |
 | Snap: drag to an edge, and Win+arrows | | ❌ | Dragging to the left edge shows no snap preview; the window just moves off-screen. Win+arrows not tested |
 | Volume / brightness keys show an OSD | Press them (needs an audio device: Enhanced Session's Remote Audio) | ❌ | Nothing: Explorer handled the volume keys too, so without it they change nothing (VK_VOLUME_DOWN ×5, still 100%). Fixed in phase 6: visor-wm binds them and Visor changes the volume and shows an OSD. Brightness keys have no virtual key; the OS handles them itself |
 | Visor runs, and its bar reserves space | `deploy.ps1` | ✅ | Phase 2: visor-shell serves `SHAppBarMessage`. Visor's bar registers, the work area becomes 0,32–1024,768, and maximised windows stop below the bar |

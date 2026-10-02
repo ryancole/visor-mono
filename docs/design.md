@@ -31,10 +31,10 @@ When `HKCU\...\Winlogon\Shell` names another program, userinit starts that progr
 | AppBars (`SHAppBarMessage`) | Gone. **Visor's own `PanelWindow` depends on this** for exclusive zones | We are the appbar server and own the work area. Cairo never built this part [V] |
 | Shell hook events | Still work: `RegisterShellHookWindow` is a user32 feature [V] | Shell hook window, plus `SetTaskmanWindow` |
 | ITaskbarList (progress, overlay) | Gone | `TaskbandHWND` property on our tray [V, ManagedShell] |
-| Run, RunOnce, Startup folders | Never run [V] | Our own startup runner |
+| Run, RunOnce, Startup folders | Never run [V] | Our own startup runner (`shell/startup.cpp`, done) |
 | Start menu, search, Widgets | Gone [V] | Launcher in Visor (Phase 4, done) |
 | Win-key hotkeys | Explorer registered most of them, so they go dead. Win+L stays with the system [V] | `RegisterHotKey(MOD_WIN, …)` once Explorer no longer holds them, plus a low-level hook for a bare Win press [I] |
-| Alt+Tab | Switching still works, but **no UI is drawn on 24H2 and later** [V] | Our own switcher (later phase) |
+| Alt+Tab | Switching still works, but **no UI is drawn on 24H2 and later** [V] | Our own switcher (Phase 7, done): visor-wm's hook keeps the key, Visor draws it with DWM thumbnails |
 | Snap and Snap Layouts, Task View, virtual desktops | Live in twinui inside Explorer, so lost [I] | Defer. Rebuild only if needed |
 | Toasts, Notification Center, Quick Settings, volume/brightness OSD | Lost [V]. The volume keys go dead too: Explorer acted on them | Phase 6: toasts and a history read from the notification platform, which keeps running; visor-wm binds the volume keys and Visor shows an OSD. Quick Settings: not rebuilt |
 | **UWP/packaged apps, including the Settings app** | **"Class not registered"**: only Explorer, or Shell Launcher (Enterprise-only), can start them [V, Cairo #365/#936] | **Biggest open risk.** See §2 |
@@ -100,7 +100,7 @@ It reports workspaces and the current layout to Visor through the same `VisorLin
 | `TrayHost` | `Shell_TrayWnd` and `TrayNotifyWnd`. Decodes `WM_COPYDATA` (dwData 0 = appbar, 1 = `NIM_*`, 3 = GetRect) using the **32-bit wire layouts** [V]. Broadcasts `TaskbarCreated`. Loads the SysTray shell service object (volume, network, power icons). Forwards clicks back using v3/v4 semantics. |
 | `AppBarServer` | A real registry for `ABM_NEW/QUERYPOS/SETPOS/REMOVE/GETTASKBARPOS/GETSTATE…`. Stacks bars per monitor per edge, sets `SPI_SETWORKAREA` per monitor, sends `ABN_POSCHANGED` and `ABN_FULLSCREENAPP`. In hosted mode it forwards to Explorer, the way ManagedShell does. |
 | `Tasks` | Shell hook window, `SetTaskmanWindow`, HSHELL_* events (created, destroyed, activated, flash, fullscreen enter/exit, getminrect), cloak tracking, `TaskbandHWND` progress and overlay. |
-| `Startup` | RunOnce (synchronous, with `!`/`*` semantics, delete HKCU values), then Run (HKLM, HKCU, Wow6432Node, Policies), then the Startup folders, all subject to `StartupApproved`. Replace mode only, once per logon. |
+| `Startup` | HKCU RunOnce (each value deleted before it runs), then Run (HKLM, Wow6432Node, HKCU, the Policies keys), then the Startup folders (machine, then user), all subject to Settings' `StartupApproved` switches and launched detached three seconds after the desktop is up. Replace mode only, once per sign-in: a volatile registry key marks it, which vanishes at sign-out. Verified in the VM: OneDrive, Edge's background launch and the security-health tray icon start. |
 | `Hotkeys` | Win+E, Win+R, Win+D, and a bare Win press for the launcher. Replace mode only, since Explorer owns these in hosted mode. |
 | `VisorLink` | IPC with Visor, and starts Visor and keeps it running. |
 
@@ -188,9 +188,9 @@ Each phase ends with something that runs in the VM.
 - Fullscreen detection.
 
 Session work runs alongside Phases 2–3:
-- Startup runner.
-- ITaskbarList progress and overlay.
-- Logoff and shutdown (`WM_QUERYENDSESSION`), multi-monitor and DPI changes.
+- Startup runner. Done (`shell/startup.cpp`).
+- ITaskbarList progress and overlay. Not done.
+- Logoff and shutdown: done. The desktop window agrees to `WM_QUERYENDSESSION` and on `WM_ENDSESSION` the shell tells Visor and visor-wm to quit and exits; `visor-session` sees `SM_SHUTTINGDOWN` and doesn't restart it. Multi-monitor and DPI changes: done in Phase 3d.
 - Explorer-as-file-manager polish.
 
 **Phase 3: window manager (`visor-wm`).** 3a (single-monitor dwindle tiling with gaps, float rules and borders), 3b (Hyprland-style key bindings) 3c (virtual desktops that follow Windows 11's conventions, and the `Workspaces` QML type) and 3d (multi-monitor moves, DPI-scaled gaps, apps with minimum sizes, desktops surviving restarts) are done. The multi-monitor behaviour is written but still needs testing on more than one monitor.
@@ -214,7 +214,7 @@ Session work runs alongside Phases 2–3:
 - A notification popup and a Notification Center of our own, read from the notification platform.
 
 **Phase 7: gaps, guided by Phase 0.**
-- An Alt+Tab switcher with DWM thumbnails.
+- An Alt+Tab switcher with DWM thumbnails. Done: `Switcher.qml`, a `PopupWindow` of `WindowThumbnail` items (`windowthumbnail.cpp`, `DwmRegisterThumbnail` into the popup, fitted to each cell in physical pixels), over `Tasks.zOrder()` (the task windows front to back, which is Windows' most-recently-used order). `wm.conf` binds `ALT, Tab` and `ALT SHIFT, Tab` to `visor, switcher next|previous`; these always go through the keyboard hook, never `RegisterHotKey`, because only the hook sees the key before Windows does and can stop its blind switch. The popup takes focus, so the Alt release reaches it as a key event and picks; `Tasks.bringToFront()` then raises the window (restoring a minimised one) rather than `activate()`, whose taskbar semantics would minimise a window that is already in front.
 - A packaged-app strategy for UWP apps (full-trust packaged apps launch, see Phase 4), or a decision that hosted mode is the answer for users who need Settings and Store apps.
 
 ## 7. Prior art to read while building

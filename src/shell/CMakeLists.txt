@@ -14,6 +14,7 @@ qt_add_executable(visor-shell WIN32
     visorlink.h visorlink.cpp
     appbars.h appbars.cpp
     trayhost.h trayhost.cpp
+    startup.h startup.cpp
 )
 target_include_directories(visor-shell PRIVATE ${PROJECT_SOURCE_DIR}/src)
 target_compile_definitions(visor-shell PRIVATE ${VISOR_DEFINITIONS})

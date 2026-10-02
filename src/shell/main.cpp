@@ -11,6 +11,7 @@
 #include "shell/appbars.h"
 #include "shell/desktopwindow.h"
 #include "shell/hotkeys.h"
+#include "shell/startup.h"
 #include "common/launch.h"
 #include "shell/supervisor.h"
 #include "common/log.h"
@@ -23,6 +24,7 @@
 #include <QDebug>
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QTimer>
 
 #include <windows.h>
 #include <objbase.h>
@@ -274,6 +276,24 @@ int main(int argc, char *argv[])
 
     // Under Explorer the user runs Visor themselves; it still connects.
     link.start(mode == Mode::Replace);
+
+    // Signing out or shutting down: Winlogon ends every process anyway;
+    // leaving first lets Visor and visor-wm close cleanly, and visor-session
+    // sees the session ending and doesn't restart us.
+    if (desktop) {
+        QObject::connect(desktop.get(), &visor::DesktopWindow::sessionEnding, &app, [&] {
+            qInfo() << "session ending";
+            link.stopVisor();
+            link.sendToWm({{QStringLiteral("type"), QStringLiteral("quit")}});
+            QCoreApplication::exit(visor::exitcode::Restart);
+        });
+    }
+
+    // What Explorer would start at sign-in, once the desktop is up (and
+    // Visor has had a moment to connect, so new windows get tracked).
+    visor::Startup startup;
+    if (mode == Mode::Replace)
+        QTimer::singleShot(3000, &startup, &visor::Startup::run);
 
     // The tiling window manager. Replace mode only: on a machine where
     // Explorer is the shell, tiling is opt-in (run visor-wm by hand).

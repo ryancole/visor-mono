@@ -5,7 +5,7 @@ Omarchy-style desktop: tiling, keyboard-driven, themeable. Native C++ and Qt,
 event-driven, small. It can run as a plain app under Explorer, or replace
 `explorer.exe` as the Windows shell.
 
-Status: **phase 6**: notifications (toast pop-ups and a Notification Center in Visor, read from the notification platform that keeps running without Explorer) and an on-screen display for the volume keys, on top of phase 5's Windows themes, followed and switched by Visor (bar, wallpaper, dark/light mode, accent, window borders and the Terminal scheme in one go), phase 4's app launcher, power menu and key-binding cheat sheet in Visor, phase 3's Hyprland-style tiling, key bindings and Windows-style virtual desktops (`visor-wm`) and phase 2's desktop, wallpaper, task list and tray, app bars and work areas, fullscreen detection and Visor supervision. Phase 0 results (what breaks without Explorer) are in [docs/phase0-compat.md](docs/phase0-compat.md).
+Status: **phase 7 (in progress)**: an Alt+Tab switcher with live previews, the programs Windows starts at sign-in, and clean sign-out, on top of phase 6's notifications (toast pop-ups and a Notification Center in Visor, read from the notification platform that keeps running without Explorer) and on-screen display for the volume keys, phase 5's Windows themes, followed and switched by Visor (bar, wallpaper, dark/light mode, accent, window borders and the Terminal scheme in one go), phase 4's app launcher, power menu and key-binding cheat sheet in Visor, phase 3's Hyprland-style tiling, key bindings and Windows-style virtual desktops (`visor-wm`) and phase 2's desktop, wallpaper, task list and tray, app bars and work areas, fullscreen detection and Visor supervision. Phase 0 results (what breaks without Explorer) are in [docs/phase0-compat.md](docs/phase0-compat.md).
 See [docs/design.md](docs/design.md) for the architecture and plan.
 
 | Program | Source | What it is |
@@ -89,6 +89,10 @@ The VM has no sound hardware. For anything that needs an audio device (the volum
 
 `screenshot.ps1` and `input.ps1` work through Hyper-V and PowerShell Direct, so they need no VM window or focus on the host. Note that Windows 11 opens console programs in Windows Terminal, which takes the foreground. The input helper runs under `conhost --headless` so it doesn't disturb what it is testing.
 
+## At sign-in
+
+Without Explorer, nothing would start the programs Windows runs at sign-in. In replace mode `visor-shell` does it, a few seconds after the desktop is up: RunOnce, the Run keys (machine and user, including the policy ones) and both Startup folders, honouring whatever Settings > Apps > Startup has turned off. It happens once per sign-in, so restarting the shell doesn't start everything twice. Signing out and shutting down work the normal way: the shell steps aside when Windows asks, and the watchdog doesn't restart it.
+
 ## Launcher and menus
 
 These are QML in Visor ([`src/bar/config`](src/bar/config): `Launcher.qml`, `SystemMenu.qml`, `CheatSheet.qml`), opened by key bindings in `wm.conf` that visor-wm passes to Visor (`bindd = SUPER, S, Launcher, visor, launcher`), or from the button at the left of the bar.
@@ -149,6 +153,7 @@ The default bindings follow Omarchy. They are all `bind` lines in `wm.conf`, in 
 | Super+Ctrl+Shift+Space | Next theme (see [Themes](#themes)) |
 | Volume keys | Volume up / down / mute, with the on-screen display |
 | Win+N | Notification Center |
+| Alt+Tab, Alt+Shift+Tab | The window switcher (see [Window switcher](#window-switcher)) |
 | Super+Return | Terminal (`wt.exe`) |
 | Super+E | File Explorer |
 | Super+W | Close the window |
@@ -179,6 +184,10 @@ Windows 11's virtual desktops live in Explorer, so they're gone in replace mode.
 - Windows has no key for moving a window to another desktop (it uses Task View), so the last row is our addition.
 - Windows on other desktops are hidden. Desktops survive `visor-wm` restarting (after a crash, a redeploy, or visor-shell restarting): the next `visor-wm` picks up the desktops and their hidden windows. If the session goes back to Explorer (Ctrl+Alt+Q, or visor-shell not coming back), every window is shown first, so none is ever lost.
 
+
+### Window switcher
+
+Windows 11 draws no Alt+Tab switcher without Explorer: the key still switches windows, blind. In replace mode `visor-wm` takes the key and Visor shows a switcher like Windows 11's: a panel in the middle of the monitor you're working on with a live preview of each window on this desktop, most recently used first. Alt+Tab steps forward and Alt+Shift+Tab back, the arrow keys move, and releasing Alt (or Enter, or a click) goes to the chosen window; Esc leaves things as they were. The previews are DWM's own, so they're live; a minimised window shows blank. Under Explorer, Windows' switcher is untouched.
 
 ## Phase 0 hotkeys
 

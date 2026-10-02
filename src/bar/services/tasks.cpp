@@ -136,6 +136,34 @@ void Tasks::activate(double hwnd)
     SetForegroundWindow(w);
 }
 
+QVariantList Tasks::zOrder() const
+{
+    QVariantList list;
+    for (HWND w = GetTopWindow(nullptr); w; w = GetWindow(w, GW_HWNDNEXT)) {
+        const int i = indexOf(quintptr(w));
+        if (i < 0)
+            continue;
+        const QModelIndex row = index(i);
+        list.append(QVariantMap{{QStringLiteral("hwnd"), double(quintptr(w))},
+                                {QStringLiteral("title"), data(row, TitleRole)},
+                                {QStringLiteral("appName"), data(row, AppNameRole)},
+                                {QStringLiteral("icon"), data(row, IconRole)}});
+    }
+    return list;
+}
+
+void Tasks::bringToFront(double hwnd)
+{
+    const auto w = reinterpret_cast<HWND>(quintptr(hwnd));
+    if (!IsWindow(w))
+        return;
+    if (IsIconic(w))
+        ShowWindowAsync(w, SW_RESTORE);
+    if (ShellLink *link = ShellLink::instance())
+        link->grantForeground(0);
+    SetForegroundWindow(w);
+}
+
 void Tasks::minimize(double hwnd)
 {
     const auto w = reinterpret_cast<HWND>(quintptr(hwnd));

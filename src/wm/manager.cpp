@@ -1061,9 +1061,13 @@ void WindowManager::registerBindings()
         const Binding &b = bindings[i];
         const int id = int(i + 1);
         // Release bindings only exist in the hook (hotkeys fire on press).
-        if (!b.release && RegisterHotKey(hwnd, id, b.modifiers | (b.repeat ? 0 : MOD_NOREPEAT), b.key))
+        // Alt+Tab too: Windows switches windows on it itself, with no UI
+        // without Explorer; only the hook sees the key before Windows does
+        // and can keep it.
+        const bool altTab = b.key == VK_TAB && (b.modifiers & MOD_ALT);
+        if (!b.release && !altTab && RegisterHotKey(hwnd, id, b.modifiers | (b.repeat ? 0 : MOD_NOREPEAT), b.key))
             continue;
-        if (!b.release && GetLastError() != ERROR_HOTKEY_ALREADY_REGISTERED)
+        if (!b.release && !altTab && GetLastError() != ERROR_HOTKEY_ALREADY_REGISTERED)
             qWarning().noquote() << "cannot bind" << b.name << "error" << GetLastError();
         hooked.append({b.modifiers, b.key, b.repeat, b.release, id});
     }

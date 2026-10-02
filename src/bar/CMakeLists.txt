@@ -30,6 +30,7 @@ qt_add_qml_module(visor
         panelwindow.h panelwindow.cpp
         popupwindow.h popupwindow.cpp
         osdwindow.h osdwindow.cpp
+        windowthumbnail.h windowthumbnail.cpp
         services/systemclock.h services/systemclock.cpp
         services/activewindow.h services/activewindow.cpp
         services/audio.h services/audio.cpp
