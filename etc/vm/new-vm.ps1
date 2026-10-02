@@ -63,7 +63,7 @@ $vm = New-VM -Name $Name -Generation 2 -Path $vmRoot `
 Set-VM -VM $vm -ProcessorCount $Cpus -DynamicMemory `
     -MemoryMinimumBytes 2GB -MemoryMaximumBytes $MemoryMaximum `
     -CheckpointType Standard -AutomaticCheckpointsEnabled $false `
-    -AutomaticStopAction ShutDown -EnhancedSessionTransportType HvSocket
+    -AutomaticStopAction ShutDown -EnhancedSessionTransportType VMBus
 
 # Windows 11 requires TPM 2.0 and Secure Boot.
 Set-VMKeyProtector -VM $vm -NewLocalKeyProtector

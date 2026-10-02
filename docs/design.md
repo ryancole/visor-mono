@@ -36,7 +36,7 @@ When `HKCU\...\Winlogon\Shell` names another program, userinit starts that progr
 | Win-key hotkeys | Explorer registered most of them, so they go dead. Win+L stays with the system [V] | `RegisterHotKey(MOD_WIN, …)` once Explorer no longer holds them, plus a low-level hook for a bare Win press [I] |
 | Alt+Tab | Switching still works, but **no UI is drawn on 24H2 and later** [V] | Our own switcher (later phase) |
 | Snap and Snap Layouts, Task View, virtual desktops | Live in twinui inside Explorer, so lost [I] | Defer. Rebuild only if needed |
-| Toasts, Notification Center, Quick Settings, volume/brightness OSD | Lost [V] | Defer. Visor already has Audio; an OSD is cheap |
+| Toasts, Notification Center, Quick Settings, volume/brightness OSD | Lost [V]. The volume keys go dead too: Explorer acted on them | Phase 6: toasts and a history read from the notification platform, which keeps running; visor-wm binds the volume keys and Visor shows an OSD. Quick Settings: not rebuilt |
 | **UWP/packaged apps, including the Settings app** | **"Class not registered"**: only Explorer, or Shell Launcher (Enterprise-only), can start them [V, Cairo #365/#936] | **Biggest open risk.** See §2 |
 | Explorer as a file manager | Works when given a path. A bare `explorer.exe` may try to become the shell [V] | Always launch it with a target. `SetShellWindow` makes our shell visible to it |
 | Ctrl+Shift+Esc, Ctrl+Alt+Del | Still work [V] | Our recovery path |
@@ -135,6 +135,17 @@ The power menu's actions run in Visor (`LockWorkStation`, `ExitWindowsEx` with `
 - **Shipped themes:** Tokyo Night, Catppuccin Mocha and Latte, Nord, Gruvbox, Everforest (MIT palettes, credited in each file). Omarchy's background images have no clear provenance, so `etc/make-wallpapers.py` renders a gradient from each theme's Terminal background and accent instead (committed).
 - **Switcher:** `ThemePicker.qml` (a `PopupWindow` with wallpaper previews, from the Win+X menu's **Themes** row or `visor, theme`), `visor, theme next` on Super+Ctrl+Shift+Space (Omarchy's key; `RegisterHotKey` accepts it), `visor, theme <name or path>`. Under Explorer the picker's last row opens `ms-settings:themes`, since Settings is where Windows keeps the rest. Everything runs from Visor, so it is the same in replace mode, hosted mode and plain Visor; hosted mode has not been tested in the VM.
 
+### Notifications and on-screen display (Phase 6, done)
+
+What mako and SwayOSD do in Omarchy, in Windows 11's shapes. Everything is in Visor, read from the platform directly: none of it is a shell service, so the link protocol gained no messages.
+
+- **Replace mode only.** Under Explorer, Windows shows toasts, has the bell and acts on the volume keys, so Visor does nothing: `Notifications` stays empty unless the shell reports replace mode, and the OSD is shown by the `visor volume` commands, which only visor-wm sends. A plain Visor under Explorer sees none of this.
+- **Where toasts come from.** Phase 0 found that without Explorer toasts are "lost", which is only the UI: the notification platform (WpnUserService) keeps running, records every toast in `%LOCALAPPDATA%\Microsoft\Windows\Notifications\wpndatabase.db` (SQLite, with the AUMID, XML payload and expiry) and serves them to the `UserNotificationListener` API. The spike showed the API works from a plain exe with no package identity, access is granted already on a fresh install (the machine-wide consent is Allow), it returns the app's display name and parsed text, and `RemoveNotification` really dismisses. So `Notifications` (`services/notifications.cpp`) reads the listener and the database is left alone. Two things the spike had to find out the hard way: the listener's `NotificationChanged` event needs package identity ("element not found" otherwise), and the database changes on disk without any file notification (the service keeps it open, so NTFS updates the directory entry lazily), so the change signal is the platform's own operational event log channel (`Microsoft-Windows-PushNotification-Platform/Operational`, enabled by default, readable by interactive users): an `EvtSubscribe` push subscription for event 3153 (a toast was delivered) and 3055 (toasts were cleared) triggers a re-read. Also, the first call must not be made from inside the shell's `WM_COPYDATA` `SendMessage` (the mode message), where outgoing COM calls fail with `E_UNEXPECTED`; it is queued to the event loop.
+- **What is shown.** `Toasts.qml`: pop-ups bottom-right on the primary monitor, newest at the bottom, five seconds each (longer under the pointer), then into the history, as Windows 11 does; the X or a click sends one there at once. A toast's action belongs to its app and the listener doesn't pass it on, so a click does no more. `NotificationCenter.qml` (Win+N, Windows' key, or the bell in the bar, with an unread count kept in `%APPDATA%\visor\notifications.ini`): the history, newest first, with per-item dismiss and Clear all, both of which remove from the platform. The icons are the launcher's (`AppIndex`, by AUMID). The backlog present when Visor starts goes to the history without pop-ups, as Windows wouldn't re-show it either.
+- **Volume keys.** Explorer acted on them, so without it they do nothing. `wm.conf` binds them Omarchy-style (`bindeld = , XF86AudioRaiseVolume, Volume up, visor, volume up`; `RegisterHotKey` takes them with no modifier), Visor applies the change through `Audio` (2 % steps, a step unmutes, as Windows) and shows `Osd.qml`: Windows 11's pill (icon, level bar, number) at the bottom centre of the focused window's monitor, with the accent colour from `Theme.qml`, gone two seconds later. Brightness keys have no virtual key (the OS acts on them itself), so `Brightness` (`services/brightness.cpp`, the WMI classes Windows' slider uses) subscribes to `WmiMonitorBrightnessEvent` and the OSD shows the new level; `visor brightness up|down` exist for bindings of your own. Untested: the VM has no brightness control.
+- **`OsdWindow`** (`osdwindow.cpp`): the window kind both use. Frameless, topmost, transparent, `WS_EX_NOACTIVATE` like the bars, optionally click-through; placed at the bottom centre, bottom right, centre or under the bar, with a `timeout` after which `shown` turns false so the config can fade it. `PopupWindow` would have taken focus and closed on losing it.
+- **Testing.** The VM has no audio device; Hyper-V's Enhanced Session gives it a Remote Audio endpoint while connected (`etc/vm/new-vm.ps1` now sets the VMBus transport that needs), and `etc/vm/screenshot.ps1 -Inside` and `etc/vm/run.ps1` capture and run inside that session, where the console thumbnail only shows the lock screen.
+
 ## 5. Safety and test environment
 
 - **Development happens in a Hyper-V VM only. The host's registry is never touched.** The install script refuses to run on any machine unless `-IAmInAVm` is passed or it detects a Hyper-V guest.
@@ -197,9 +208,9 @@ Session work runs alongside Phases 2–3:
 - Windows' theme (a `.theme` file: wallpaper, dark/light mode, accent) drives Visor QML, visor-wm's borders and, for Visor's themes, the Windows Terminal scheme.
 - A theme switcher in the menu, and Super+Ctrl+Shift+Space for the next theme.
 
-**Phase 6: notifications and OSD.**
+**Phase 6: notifications and OSD.** Done; see §4 "Notifications and on-screen display".
 - Volume and brightness OSD.
-- A notification popup. In replace mode this means reading the toast database.
+- A notification popup and a Notification Center of our own, read from the notification platform.
 
 **Phase 7: gaps, guided by Phase 0.**
 - An Alt+Tab switcher with DWM thumbnails.

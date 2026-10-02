@@ -195,6 +195,16 @@ bool parseKey(const QString &text, quint32 *out)
         {QStringLiteral("bracketright"), VK_OEM_6}, {QStringLiteral("backslash"), VK_OEM_5},
         {QStringLiteral("super_l"), VK_LWIN},       {QStringLiteral("super_r"), VK_RWIN},
         {QStringLiteral("super"), VK_LWIN},
+        // The media keys, by their xkb names (as in Omarchy's bindings).
+        // Windows has no key code for brightness: the OS acts on those
+        // keys itself, before any app sees them.
+        {QStringLiteral("xf86audioraisevolume"), VK_VOLUME_UP},
+        {QStringLiteral("xf86audiolowervolume"), VK_VOLUME_DOWN},
+        {QStringLiteral("xf86audiomute"), VK_VOLUME_MUTE},
+        {QStringLiteral("xf86audioplay"), VK_MEDIA_PLAY_PAUSE},
+        {QStringLiteral("xf86audionext"), VK_MEDIA_NEXT_TRACK},
+        {QStringLiteral("xf86audioprev"), VK_MEDIA_PREV_TRACK},
+        {QStringLiteral("xf86audiostop"), VK_MEDIA_STOP},
     };
     const auto it = names.constFind(key);
     if (it == names.cend())
@@ -217,12 +227,13 @@ bool isInt(const QString &s)
 }
 
 // `flags` is what follows "bind" in the key: d (description), e (repeat),
-// r (release).
+// r (release), l (Hyprland's "works on the lock screen": accepted, and
+// meaningless here, since Windows owns its lock screen).
 bool parseBinding(const QString &flags, const QString &value, Binding *binding, QString *error)
 {
     for (QChar f : flags) {
-        if (f != QLatin1Char('d') && f != QLatin1Char('e') && f != QLatin1Char('r')) {
-            *error = QStringLiteral("unsupported bind flag '%1' (supported: d, e, r)").arg(f);
+        if (f != QLatin1Char('d') && f != QLatin1Char('e') && f != QLatin1Char('r') && f != QLatin1Char('l')) {
+            *error = QStringLiteral("unsupported bind flag '%1' (supported: d, e, r, l)").arg(f);
             return false;
         }
     }

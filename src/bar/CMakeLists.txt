@@ -7,6 +7,7 @@ qt_add_executable(visor WIN32
     settings.h settings.cpp
     shell.h shell.cpp
     tray.h tray.cpp
+    screens.h screens.cpp
     services/shelllink.h services/shelllink.cpp
     services/windowicons.h services/windowicons.cpp
     services/appindex.h services/appindex.cpp
@@ -28,6 +29,7 @@ qt_add_qml_module(visor
         visorapi.h visorapi.cpp
         panelwindow.h panelwindow.cpp
         popupwindow.h popupwindow.cpp
+        osdwindow.h osdwindow.cpp
         services/systemclock.h services/systemclock.cpp
         services/activewindow.h services/activewindow.cpp
         services/audio.h services/audio.cpp
@@ -39,6 +41,8 @@ qt_add_qml_module(visor
         services/keybindings.h services/keybindings.cpp
         services/apps.h services/apps.cpp
         services/themes.h services/themes.cpp
+        services/brightness.h services/brightness.cpp
+        services/notifications.h services/notifications.cpp
 )
 
 # services/ is listed too: the generated QML type registration includes
@@ -69,6 +73,8 @@ target_link_libraries(visor PRIVATE
     powrprof
     shlwapi
     windowsapp
+    wbemuuid
+    wevtapi
 )
 
 # Ship the default config (Visor's QML and visor-wm's wm.conf) next to the

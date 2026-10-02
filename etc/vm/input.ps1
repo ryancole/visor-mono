@@ -55,6 +55,7 @@ for (`$i = 0; `$i -lt $clicks; `$i++) {
         ctrl = 0x11; alt = 0x12; shift = 0x10; win = 0x5B; escape = 0x1B; esc = 0x1B; enter = 0x0D; tab = 0x09
         space = 0x20; left = 0x25; up = 0x26; right = 0x27; down = 0x28; delete = 0x2E; backspace = 0x08
         return = 0x0D; minus = 0xBD; equal = 0xBB
+        volume_mute = 0xAD; volume_down = 0xAE; volume_up = 0xAF
     }
     $vks = foreach ($part in $Key.ToLower() -split '\+') {
         if ($names.ContainsKey($part)) { $names[$part] }
@@ -74,6 +75,14 @@ Invoke-Command -VMName $Name -Credential $c -ArgumentList "$prelude`n$body" {
     New-Item -ItemType Directory -Force C:\visor | Out-Null
     Set-Content C:\visor\input.ps1 $script
     $user = (Get-CimInstance Win32_ComputerSystem).UserName
+    if (-not $user) {
+        # Only the console user is in Win32_ComputerSystem; in an Enhanced
+        # Session (RDP) the session list says who is active.
+        foreach ($line in (quser 2>$null)) {
+            if ($line -match '^\s*>?(\S+)\s+\S+\s+\d+\s+Active') { $user = $Matches[1]; break }
+        }
+    }
+    if (-not $user) { throw 'Nobody is signed in to the VM.' }
     # conhost --headless: no console window. A plain powershell.exe would be
     # handed to Windows Terminal, whose window takes the foreground and spoils
     # whatever the input was meant for.

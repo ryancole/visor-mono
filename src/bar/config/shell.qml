@@ -10,10 +10,16 @@ ShellRoot {
     SystemMenu { id: systemMenu; themePicker: themePicker }
     CheatSheet { id: cheatSheet }
     ThemePicker { id: themePicker }
+    NotificationCenter { id: notificationCenter }
+    // Overlays that never take focus: the volume / brightness display, and
+    // toast pop-ups (replace mode only; under Explorer, Windows shows both).
+    Osd { id: osd }
+    Toasts {}
 
     // The `visor` key bindings in wm.conf land here: "launcher", "menu",
     // "keys", "run", "theme" (the picker), "theme next" / "theme previous",
-    // or "theme <name or .theme path>".
+    // "theme <name or .theme path>", "volume up" / "volume down" /
+    // "volume mute", "brightness up" / "brightness down", "notifications".
     Connections {
         target: Shell
         function onCommand(name) {
@@ -31,6 +37,22 @@ ShellRoot {
                 else if (argument) Themes.apply(argument)
                 else themePicker.toggle()
                 break
+            case "volume":
+                // As Windows' keys: 2% steps, and a step unmutes.
+                if (argument === "mute") {
+                    Audio.toggleMute()
+                } else if (argument === "up" || argument === "down") {
+                    Audio.muted = false
+                    Audio.volume = Math.min(1, Math.max(0, Audio.volume + (argument === "up" ? 0.02 : -0.02)))
+                }
+                osd.showVolume()
+                break
+            case "brightness":
+                if (argument === "up" || argument === "down")
+                    Brightness.level = Math.min(1, Math.max(0, Brightness.level + (argument === "up" ? 0.1 : -0.1)))
+                osd.showBrightness()
+                break
+            case "notifications": notificationCenter.toggle(); break
             }
         }
     }
@@ -43,6 +65,7 @@ ShellRoot {
             screen: modelData
             launcherPopup: launcher
             menuPopup: systemMenu
+            notificationsPopup: notificationCenter
         }
     }
 }

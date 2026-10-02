@@ -90,6 +90,10 @@ QString KeyBindings::label(const QString &keys)
         {"bracketleft", "["}, {"bracketright", "]"}, {"backslash", "\\"}, {"prior", "PgUp"},
         {"page_up", "PgUp"}, {"next", "PgDn"},     {"page_down", "PgDn"}, {"home", "Home"},
         {"end", "End"},      {"insert", "Ins"},    {"print", "PrtSc"},
+        // The media keys, by their xkb names.
+        {"xf86audioraisevolume", "Volume up"}, {"xf86audiolowervolume", "Volume down"},
+        {"xf86audiomute", "Mute"}, {"xf86audioplay", "Play/Pause"}, {"xf86audionext", "Next track"},
+        {"xf86audioprev", "Previous track"}, {"xf86audiostop", "Stop"},
     };
     QStringList parts;
     const QStringList tokens = keys.split(QLatin1Char('+'), Qt::SkipEmptyParts);

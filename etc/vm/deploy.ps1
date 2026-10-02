@@ -54,6 +54,13 @@ $vmHelpers = {
     function Start-OnDesktop([string] $Exe, [string] $Arguments) {
         $user = (Get-CimInstance Win32_ComputerSystem).UserName
         if (-not $user) {
+            # Only the console user is in Win32_ComputerSystem; in an Enhanced
+            # Session (RDP) the session list says who is active.
+            foreach ($line in (quser 2>$null)) {
+                if ($line -match '^\s*>?(\S+)\s+\S+\s+\d+\s+Active') { $user = $Matches[1]; break }
+            }
+        }
+        if (-not $user) {
             Write-Warning 'Nobody is signed in to the VM; not starting anything.'
             return
         }

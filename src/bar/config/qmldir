@@ -9,3 +9,6 @@ Launcher 1.0 Launcher.qml
 SystemMenu 1.0 SystemMenu.qml
 CheatSheet 1.0 CheatSheet.qml
 ThemePicker 1.0 ThemePicker.qml
+NotificationCenter 1.0 NotificationCenter.qml
+Osd 1.0 Osd.qml
+Toasts 1.0 Toasts.qml

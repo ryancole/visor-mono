@@ -30,10 +30,11 @@ struct WindowRule
 //   bindd[flags] = MODS, key, description, dispatcher[, argument]
 // Flags: e repeats while the key is held; r fires when the key is released,
 // and only if nothing else was pressed in between (`bindr = SUPER, SUPER_L,
-// ...` is a bare Win press). Modifiers: SUPER (or WIN), SHIFT, CTRL, ALT, in
-// any order and separated any way. Keys use Hyprland's (xkb) names: a-z,
-// 0-9, F1-F24, Return, space, Tab, Escape, left, right, up, down, minus,
-// equal, comma, period, slash, SUPER_L, SUPER_R, ...
+// ...` is a bare Win press); l is accepted and ignored. Modifiers: SUPER (or
+// WIN), SHIFT, CTRL, ALT, in any order and separated any way, or none
+// (`bindel = , XF86AudioRaiseVolume, ...`). Keys use Hyprland's (xkb) names:
+// a-z, 0-9, F1-F24, Return, space, Tab, Escape, left, right, up, down, minus,
+// equal, comma, period, slash, SUPER_L, SUPER_R, XF86AudioRaiseVolume, ...
 // Dispatchers (as in Hyprland):
 //   exec <command line>    killactive          togglefloating
 //   visor <name>           (ours: tells Visor to run its `name` command, e.g.

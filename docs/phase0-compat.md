@@ -20,7 +20,7 @@ Fill in each result as ✅ works, ❌ broken, or ⚠️ partly works, and add no
 | Ctrl+Alt+Q hands over to Explorer (a full taskbar appears) | Ctrl+Alt+Q | ✅ | Explorer was the shell 0.3 s later. Winlogon relaunched `visor-session` 19 ms after `visor-shell` exited (even with exit code 2); the single-instance check made it exit |
 | Sign out and shut down work | Ctrl+Alt+Del | | |
 | Plain Safe Mode honours the HKCU shell | Advanced startup → Safe Mode | | |
-| Enhanced Session (RDP) behaves like the console | Connect both ways | | |
+| Enhanced Session (RDP) behaves like the console | Connect both ways | ✅ | Needs the VMBus transport (`new-vm.ps1` had HvSocket, which is for Linux guests) and Remote Desktop allowed in the guest. The reconnect goes through a placeholder display (`WinDisc`): visor-wm moves windows across it and back, Visor's bar re-registers, the work area ends up right. While connected, the console shows the lock screen (`screenshot.ps1 -Inside` captures the session instead) |
 
 ## Apps and features
 
@@ -34,12 +34,12 @@ Fill in each result as ✅ works, ❌ broken, or ⚠️ partly works, and add no
 | Windows Terminal (packaged) | Ctrl+Alt+T | ✅ | Full-trust packaged app; `wt.exe` alias works |
 | Packaged apps through the shell (`shell:AppsFolder\<id>`, or the item's PIDL) | Phase 4 launcher | ❌ | `REGDB_E_CLASSNOTREG` for every packaged app, full-trust ones included; shortcuts launch fine. The launcher runs full-trust packaged apps by their execution alias or executable instead (see design.md §4) |
 | Edge | Run → `msedge` | ✅ | |
-| Toast notification | `New-BurntToastNotification`, or any app's toast | | |
+| Toast notification | `New-BurntToastNotification`, or any app's toast | ❌ | Nothing is shown, but the notification platform (WpnUserService) keeps running: every toast lands in `%LOCALAPPDATA%\Microsoft\Windows\Notifications\wpndatabase.db`, and the `UserNotificationListener` API reads them from a plain exe (access was already allowed; the machine-wide consent is Allow). Fixed in phase 6: Visor shows toasts and keeps a history |
 | Alt+Tab shows a switcher | Alt+Tab with 2+ windows open | ⚠️ | Switching works (focus moved from Explorer to Terminal), but nothing is drawn. Not checked while holding Alt |
 | Win+R / Win+E / Win+D / Win+L | Press each | ❌ | Win+R and Win+E do nothing; the letter reaches the focused app. Win+D and Win+L not tested. Free for our own bindings |
 | Win+Shift+S (snip) / Win+V (clipboard) / Win+. (emoji) | Press each | | |
 | Snap: drag to an edge, and Win+arrows | | ❌ | Dragging to the left edge shows no snap preview; the window just moves off-screen. Win+arrows not tested |
-| Volume / brightness keys show an OSD | | | |
+| Volume / brightness keys show an OSD | Press them (needs an audio device: Enhanced Session's Remote Audio) | ❌ | Nothing: Explorer handled the volume keys too, so without it they change nothing (VK_VOLUME_DOWN ×5, still 100%). Fixed in phase 6: visor-wm binds them and Visor changes the volume and shows an OSD. Brightness keys have no virtual key; the OS handles them itself |
 | Visor runs, and its bar reserves space | `deploy.ps1` | ✅ | Phase 2: visor-shell serves `SHAppBarMessage`. Visor's bar registers, the work area becomes 0,32–1024,768, and maximised windows stop below the bar |
 | Tray icons appear anywhere | | ✅ | Phase 2: visor-shell is `Shell_TrayWnd` and Visor draws the icons. Seen: OneDrive, Windows Security, the classic volume icon (from the SysTray shell service object, which costs about 5 MB and some threads in visor-shell), and Visor's own |
 | Tray clicks reach apps | Right-click Visor's and OneDrive's icons | ✅ | Menus open at the click point and close on Escape. OneDrive's Activity Center docks under the bar. Visor has to take the foreground first (attach to the foreground thread's input) and pass it on: clicks on its `WS_EX_NOACTIVATE` bar give it no foreground rights. Volume icon click: no visible flyout (the VM has no audio device; Win11's flyout lived in Explorer) |

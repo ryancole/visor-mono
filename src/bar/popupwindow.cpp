@@ -1,46 +1,15 @@
 #include "popupwindow.h"
 
+#include "screens.h"
 #include "services/shelllink.h"
 
-#include <QGuiApplication>
 #include <QKeyEvent>
 #include <QScreen>
-#include <QtGui/qscreen_platform.h>
 
 #include <windows.h>
 #include <dwmapi.h>
 
 #include <algorithm>
-
-namespace {
-
-QScreen *screenOf(HMONITOR monitor)
-{
-    const auto screens = QGuiApplication::screens();
-    for (QScreen *screen : screens) {
-        if (auto *native = screen->nativeInterface<QNativeInterface::QWindowsScreen>()) {
-            if (native->handle() == monitor)
-                return screen;
-        }
-    }
-    return QGuiApplication::primaryScreen();
-}
-
-// A QScreen, or a QML screen object with a matching `name`.
-QScreen *screenOf(QObject *object)
-{
-    if (auto *screen = qobject_cast<QScreen *>(object))
-        return screen;
-    const QString name = object->property("name").toString();
-    const auto screens = QGuiApplication::screens();
-    for (QScreen *screen : screens) {
-        if (screen->name() == name)
-            return screen;
-    }
-    return nullptr;
-}
-
-} // namespace
 
 PopupWindow::PopupWindow(QWindow *parent)
     : QQuickWindow(parent)
@@ -95,9 +64,9 @@ void PopupWindow::open(QObject *screenObject)
     const HWND foreground = GetForegroundWindow();
     m_previous = foreground;
     // Where the user is working: the focused window's monitor.
-    QScreen *target = screenObject ? screenOf(screenObject) : nullptr;
+    QScreen *target = screenObject ? screenForObject(screenObject) : nullptr;
     if (!target)
-        target = screenOf(MonitorFromWindow(foreground ? foreground : GetDesktopWindow(), MONITOR_DEFAULTTOPRIMARY));
+        target = screenOfFocusedWindow();
     setScreen(target);
     create();
     const auto hwnd = reinterpret_cast<HWND>(winId());
@@ -144,7 +113,9 @@ void PopupWindow::place()
     if (!s)
         return;
     const QRect work = s->availableGeometry();
-    const int x = m_placement == BelowLeft ? work.left() + m_margin : work.left() + (work.width() - width()) / 2;
+    const int x = m_placement == BelowLeft    ? work.left() + m_margin
+                  : m_placement == BelowRight ? work.left() + work.width() - width() - m_margin
+                                              : work.left() + (work.width() - width()) / 2;
     const int y = m_placement == Center ? work.top() + (work.height() - height()) / 2 : work.top() + m_margin;
     // Never over the bar, whatever the size.
     setPosition(std::max(x, work.left()), std::max(y, work.top()));

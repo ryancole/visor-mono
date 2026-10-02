@@ -10,8 +10,8 @@
 //
 // open() puts it on the monitor of the window that had focus (which gets
 // focus back on close), or on `screen` if given (a bar passes its own when
-// clicked): below the top of the work area, i.e. under the bar, centred or
-// at the left, or in the middle of the screen.
+// clicked): below the top of the work area, i.e. under the bar, centred, at
+// the left or at the right, or in the middle of the screen.
 //
 //   PopupWindow {
 //       id: launcher
@@ -34,7 +34,7 @@ class PopupWindow : public QQuickWindow
                    closeOnDeactivateChanged)
 
 public:
-    enum Placement { Below, BelowLeft, Center };
+    enum Placement { Below, BelowLeft, BelowRight, Center };
     Q_ENUM(Placement)
 
     explicit PopupWindow(QWindow *parent = nullptr);

@@ -4,9 +4,10 @@ import Visor
 PanelWindow {
     id: bar
 
-    // The pop-ups the launcher button opens (set by shell.qml).
+    // The pop-ups the bar's buttons open (set by shell.qml).
     property PopupWindow launcherPopup
     property PopupWindow menuPopup
+    property PopupWindow notificationsPopup
 
     edge: PanelWindow.Top
     thickness: Theme.barHeight
@@ -38,7 +39,7 @@ PanelWindow {
 
             Icon {
                 anchors.centerIn: parent
-                glyph: "" // AllApps
+                glyph: "" // AllApps
                 color: Theme.accent
                 font.pixelSize: 16
             }
@@ -98,7 +99,7 @@ PanelWindow {
         font.weight: Font.DemiBold
     }
 
-    // Right: media and volume.
+    // Right: tray, media, volume and notifications.
     Row {
         anchors.right: parent.right
         anchors.rightMargin: 12
@@ -123,7 +124,7 @@ PanelWindow {
 
                 Icon {
                     anchors.verticalCenter: parent.verticalCenter
-                    glyph: Media.playing ? "\uE769" : "\uE768" // Pause / Play
+                    glyph: Media.playing ? "" : "" // Pause / Play
                     color: Theme.accent
                 }
                 Label {
@@ -154,10 +155,10 @@ PanelWindow {
 
                 Icon {
                     anchors.verticalCenter: parent.verticalCenter
-                    glyph: Audio.muted ? "\uE74F"
-                         : Audio.volume < 0.01 ? "\uE992"
-                         : Audio.volume < 0.34 ? "\uE993"
-                         : Audio.volume < 0.67 ? "\uE994" : "\uE995"
+                    glyph: Audio.muted ? ""
+                         : Audio.volume < 0.01 ? ""
+                         : Audio.volume < 0.34 ? ""
+                         : Audio.volume < 0.67 ? "" : ""
                 }
                 Label {
                     anchors.verticalCenter: parent.verticalCenter
@@ -170,6 +171,45 @@ PanelWindow {
                 cursorShape: Qt.PointingHandCursor
                 onClicked: Audio.toggleMute()
                 onWheel: wheel => Audio.volume += wheel.angleDelta.y > 0 ? 0.02 : -0.02
+            }
+        }
+
+        // Notifications: the bell, with how many came since you last looked.
+        // Replace mode only; under Explorer the taskbar has its own.
+        Item {
+            visible: Notifications.available
+            width: 24
+            height: parent.height
+
+            Icon {
+                anchors.centerIn: parent
+                glyph: Notifications.unread > 0 ? "" : "" // RingerSolid / Ringer
+                font.pixelSize: 15
+            }
+
+            Rectangle {
+                visible: Notifications.unread > 0
+                anchors.top: parent.top
+                anchors.topMargin: 4
+                anchors.right: parent.right
+                width: 14
+                height: 14
+                radius: 7
+                color: Theme.accent
+
+                Label {
+                    anchors.centerIn: parent
+                    text: Math.min(Notifications.unread, 9)
+                    color: Theme.background
+                    font.pixelSize: 9
+                    font.weight: Font.DemiBold
+                }
+            }
+
+            MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                onClicked: if (bar.notificationsPopup) bar.notificationsPopup.toggle(bar.screen)
             }
         }
     }
