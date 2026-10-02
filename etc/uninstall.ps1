@@ -1,13 +1,18 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Restores the current user's shell to what it was before install.ps1.
+    Removes what install.ps1 set up for the current user, in either mode.
 
 .DESCRIPTION
     Puts back the per-user Winlogon Shell value saved by install.ps1, or removes
-    it (so the machine-wide default, explorer.exe, applies). Safe to run any
-    time, including when visor-shell was never installed. Takes effect at the
-    next sign-in; run explorer.exe to get a desktop right away.
+    it (so the machine-wide default, explorer.exe, applies), and removes the
+    hosted-mode Run entry. Safe to run any time, including when visor-shell was
+    never installed. Takes effect at the next sign-in; run explorer.exe to get
+    a desktop right away.
+
+    A visor-shell running in hosted mode is asked to quit first (which puts
+    Explorer's taskbar back). That only works from the user's own session; from
+    outside it (PowerShell Direct), quit it with Ctrl+Alt+Q instead.
 
 .EXAMPLE
     .\uninstall.ps1
@@ -18,6 +23,8 @@ param()
 $ErrorActionPreference = 'Stop'
 
 $WinlogonKey = 'HKCU:\Software\Microsoft\Windows NT\CurrentVersion\Winlogon'
+$RunKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
+$RunValue = 'visor-shell'
 $StateKey = 'HKCU:\Software\visor-shell'
 $NoPrevious = '<none>'
 
@@ -35,4 +42,26 @@ if ($previous -and $previous -ne $NoPrevious -and $previous -notlike '*visor-ses
     Write-Host "visor-shell is not the shell for $env:USERNAME; nothing to restore."
 }
 
-Remove-Item $StateKey -Recurse -ErrorAction SilentlyContinue
+$run = (Get-ItemProperty $RunKey -Name $RunValue -ErrorAction SilentlyContinue).$RunValue
+if ($run) {
+    Remove-ItemProperty $RunKey -Name $RunValue
+    Write-Host "Run entry removed for $env:USERNAME ($run)."
+    if ((Get-Process visor-shell -ErrorAction SilentlyContinue) -and $run -match '^"([^"]+)"') {
+        & $Matches[1] --quit
+        $deadline = (Get-Date).AddSeconds(5)
+        while ((Get-Date) -lt $deadline -and (Get-Process visor-shell -ErrorAction SilentlyContinue)) {
+            Start-Sleep -Milliseconds 250
+        }
+        if (Get-Process visor-shell -ErrorAction SilentlyContinue) {
+            Write-Warning 'visor-shell is still running; press Ctrl+Alt+Q in its session to quit it.'
+        }
+    }
+}
+
+# PreviousShell, and the taskbar state a hosted visor-shell restores on
+# exit. Only the latter is kept if a hosted shell is still running.
+if (Get-Process visor-shell -ErrorAction SilentlyContinue) {
+    Remove-ItemProperty $StateKey -Name PreviousShell -ErrorAction SilentlyContinue
+} else {
+    Remove-Item $StateKey -Recurse -ErrorAction SilentlyContinue
+}

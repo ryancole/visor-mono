@@ -46,3 +46,24 @@ Fill in each result as ✅ works, ❌ broken, or ⚠️ partly works, and add no
 | Fullscreen apps hide the bar | F11 in Terminal | ✅ | `ABN_FULLSCREENAPP` on foreground changes and `HSHELL_FULLSCREENENTER/EXIT`; the bar comes back on exit |
 | Minimised windows | Minimise any window | ✅ | With no taskbar, Windows parks them as Win 3.1-style title-bar stubs at the bottom-left. Fixed in phase 1: while Visor is connected (and lists them), visor-shell sets `ARW_HIDE` for the session and restores the old value when Visor goes away. Windows minimised before that keep their stub until restored |
 | Stopping Explorer starts our shell | Kill explorer.exe while it is the shell | ✅ | Winlogon relaunches the configured (HKCU) shell. Switches a session from Explorer back to visor-shell without signing out |
+
+## Hosted mode (Explorer stays the shell)
+
+Phase 8, same build. Tested with `pwsh etc/vm/deploy.ps1 -Hosted` after Ctrl+Alt+Q had handed the session to Explorer, with Ryan connected by Enhanced Session (so the volume key had Remote Audio to act on).
+
+| Check | How | Result | Notes |
+| --- | --- | --- | --- |
+| Bar docks, taskbar auto-hides | Start visor-shell hosted | ✅ | `ABM_SETSTATE` with `ABS_AUTOHIDE`. Work area 0,32–1920,1080: Visor's bar reserves 32 px, the auto-hidden taskbar none; maximised windows fill it; desktop icons move below the bar. The bar follows Explorer's light mode. The taskbar peeks on hover and for a moment when a toast arrives, as it does normally |
+| Task list | Open Notepad | ✅ | Shell hook messages reach a non-shell window, as Phase 2 saw |
+| Settings from the launcher | Type "settings", Enter | ✅ | Listed as launchable (no "Needs Explorer"); SystemSettings runs and gets a window |
+| Settings > Apps > Startup lists the Run entry | | ✅ | "visor-shell", On, "Not measured" |
+| Theme picker's Settings row | Right-click the button > Themes > Personalization settings... | ✅ | Opens Settings at Personalization > Themes |
+| Toast is Windows' | WinRT `ToastNotificationManager` from PowerShell | ✅ | Windows' toast (app header, close button) at the bottom right; the bar has no bell |
+| Volume key shows Windows' flyout | VK_VOLUME_UP | ✅ | Windows 11's flyout, 84 → 86 |
+| Alt+Tab is Windows' | Hold Alt, press Tab | ✅ | Windows' switcher with its large previews |
+| Menu's quit row | Right-click the button | ✅ | Reads "Quit Visor" instead of "Quit to Explorer" |
+| Ctrl+Alt+Q restores the taskbar | | ✅ | Shell and Visor exit, auto-hide off again, the recorded state removed; the work area returns to 0,0–1920,1032 |
+| Clean restart from the host | `deploy.ps1` with a hosted shell running | ✅ | `visor-shell --quit` (a `WM_CLOSE` to the link window), then a fresh start |
+| Crash | `Stop-Process visor-shell` | ⚠️ | Nothing restarts it; Visor stays up as a plain bar and reconnects when the shell is started again (no second Visor). The taskbar stays auto-hidden, the record survives, the next run keeps it and its clean exit restores the original |
+| Back to replace mode | `deploy.ps1 -Install`, then stop explorer.exe | ✅ | The Run entry goes, the Shell override returns, Winlogon starts the HKCU shell |
+| visor-wm under Explorer | | | Not tested |

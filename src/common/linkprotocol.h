@@ -11,7 +11,8 @@
 // Discovery: the shell's window has class kShellLinkClass. When the shell
 // starts it broadcasts the registered message kShellCreatedMessage (like
 // Explorer's TaskbarCreated), so a running Visor reconnects; Visor also sends
-// "hello" when it starts.
+// "hello" when it starts. A WM_CLOSE to the shell's window (what
+// `visor-shell --quit` sends, for scripts) quits the shell as Ctrl+Alt+Q does.
 //
 // Visor -> shell:
 //   {"type":"hello","version":"..."}

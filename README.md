@@ -5,7 +5,7 @@ Omarchy-style desktop: tiling, keyboard-driven, themeable. Native C++ and Qt,
 event-driven, small. It can run as a plain app under Explorer, or replace
 `explorer.exe` as the Windows shell.
 
-Status: **phase 7 (in progress)**: an Alt+Tab switcher with live previews, the programs Windows starts at sign-in, and clean sign-out, on top of phase 6's notifications (toast pop-ups and a Notification Center in Visor, read from the notification platform that keeps running without Explorer) and on-screen display for the volume keys, phase 5's Windows themes, followed and switched by Visor (bar, wallpaper, dark/light mode, accent, window borders and the Terminal scheme in one go), phase 4's app launcher, power menu and key-binding cheat sheet in Visor, phase 3's Hyprland-style tiling, key bindings and Windows-style virtual desktops (`visor-wm`) and phase 2's desktop, wallpaper, task list and tray, app bars and work areas, fullscreen detection and Visor supervision. Phase 0 results (what breaks without Explorer) are in [docs/phase0-compat.md](docs/phase0-compat.md).
+Status: **phase 8 (done)**: [hosted mode](#hosted-mode), where Explorer stays the shell with its taskbar auto-hidden and everything that lives in Explorer keeps working, on top of phase 7's Alt+Tab switcher with live previews, the programs Windows starts at sign-in, and clean sign-out, phase 6's notifications (toast pop-ups and a Notification Center in Visor, read from the notification platform that keeps running without Explorer) and on-screen display for the volume keys, phase 5's Windows themes, followed and switched by Visor (bar, wallpaper, dark/light mode, accent, window borders and the Terminal scheme in one go), phase 4's app launcher, power menu and key-binding cheat sheet in Visor, phase 3's Hyprland-style tiling, key bindings and Windows-style virtual desktops (`visor-wm`) and phase 2's desktop, wallpaper, task list and tray, app bars and work areas, fullscreen detection and Visor supervision. Phase 0 results (what breaks without Explorer) are in [docs/phase0-compat.md](docs/phase0-compat.md).
 See [docs/design.md](docs/design.md) for the architecture and plan.
 
 | Program | Source | What it is |
@@ -19,7 +19,7 @@ See [docs/design.md](docs/design.md) for the architecture and plan.
 
 **Only install this in a VM** until it is proven. `etc/install.ps1` refuses to run on a physical machine.
 
-On a real machine, run `visor-shell --mode hosted` alongside Explorer, which is what `pwsh etc/build.ps1 -Run` does.
+On a real machine, use [hosted mode](#hosted-mode): `visor-shell --mode hosted` alongside Explorer, which is what `pwsh etc/build.ps1 -RunShell` runs (it asks the taskbar to auto-hide while it runs).
 
 ### Emergency recovery
 
@@ -75,9 +75,10 @@ All of these scripts run on the host. They need Hyper-V admin rights.
 pwsh etc/vm/new-vm.ps1 -Iso <win11.iso>   # create the VM, then install Windows 11 Pro
 pwsh etc/vm/new-vm.ps1 -Checkpoint        # take the "clean" checkpoint
 pwsh etc/vm/save-credential.ps1           # save the VM login (encrypted, outside the repo)
-pwsh etc/vm/deploy.ps1 -Install           # copy the build and make it the VM user's shell
-pwsh etc/vm/deploy.ps1                    # later deploys: copy everything to C:\visor and restart
-pwsh etc/vm/deploy.ps1 -Restore           # back to Explorer
+pwsh etc/vm/deploy.ps1 -Install           # copy the build and make it the VM user's shell (replace mode)
+pwsh etc/vm/deploy.ps1 -Hosted            # copy the build, install hosted mode and start it (Explorer stays)
+pwsh etc/vm/deploy.ps1                    # later deploys: copy everything to C:\visor and restart, either mode
+pwsh etc/vm/deploy.ps1 -Restore           # back to plain Explorer
 pwsh etc/vm/screenshot.ps1                # the VM's screen -> build/vm-screen.png
 pwsh etc/vm/input.ps1 -Click 948,16 -Button right   # click inside the VM
 pwsh etc/vm/input.ps1 -Key ctrl+alt+r     # press keys inside the VM
@@ -88,6 +89,17 @@ pwsh etc/vm/screenshot.ps1 -Inside        # the screen as the signed-in user see
 The VM has no sound hardware. For anything that needs an audio device (the volume keys), connect to it with vmconnect's **Enhanced Session** (View menu) with remote audio on: Windows in the VM then has a Remote Audio endpoint for as long as you're connected. While you are, the console shows the lock screen, so `screenshot.ps1` needs `-Inside`.
 
 `screenshot.ps1` and `input.ps1` work through Hyper-V and PowerShell Direct, so they need no VM window or focus on the host. Note that Windows 11 opens console programs in Windows Terminal, which takes the foreground. The input helper runs under `conhost --headless` so it doesn't disturb what it is testing.
+
+## Hosted mode
+
+Explorer stays the Windows shell and `visor-shell --mode hosted` runs alongside it. This is the Windows-conventional configuration, and the one for a real machine: Windows has no supported way to replace Explorer on desktop editions (Shell Launcher is for Enterprise kiosks, and loses Store apps too), so everything that lives in Explorer keeps working here: Settings and Store apps, Windows' own toasts and Notification Center, Quick Settings, the volume flyout, Snap, Task View, Windows' Alt+Tab, Win+Shift+S and clipboard history. Replace mode stays the lighter path.
+
+- **Starting at sign-in:** `etc/install.ps1 -Hosted` adds a Run entry (`HKCU\...\CurrentVersion\Run\visor-shell`), the way Windows starts any app at sign-in; it shows in Settings > Apps > Startup, where it can be turned off. The entry and the replace-mode shell override are exclusive: each install removes the other, and `uninstall.ps1` removes both. In the VM, `pwsh etc/vm/deploy.ps1 -Hosted` does it all and starts the shell.
+- **The taskbar:** visor-shell asks Explorer's taskbar to auto-hide, through the documented app bar API (`ABM_SETSTATE`; `Shell_TrayWnd` is left alone), so Visor's bar is the one on screen and the taskbar is a hover away at the bottom. Auto-hide is Explorer's own setting and persists, so the original is recorded in `HKCU\Software\visor-shell` the first time it is changed and put back on a clean exit: Ctrl+Alt+Q, the menu's **Quit Visor**, or `visor-shell --quit`. A crash leaves it for the next run to restore, and a restarted Explorer is asked again.
+- **What visor-shell does here:** starts and supervises Visor and feeds it the task list. Not the desktop, the tray (Explorer's auto-hidden taskbar has it, Visor's own icon included), app bars (Visor's bars register with Explorer's), the startup programs, or visor-wm.
+- **Keys:** Explorer keeps every Win-key shortcut. The launcher and the menu open from the bar's button (left and right click). Tiling stays opt-in: run `visor-wm.exe` by hand (its Win-key bindings then compete with Explorer's; not tested under Explorer). Ctrl+Alt+Q quits visor-shell and Visor together.
+- **What Visor leaves to Windows:** toasts and the Notification Center (no bell in the bar), the volume display and the Alt+Tab switcher. The theme picker's last row, **Personalization settings...**, opens Settings. All of it verified in the VM: see [docs/phase0-compat.md](docs/phase0-compat.md#hosted-mode-explorer-stays-the-shell).
+- **Not done:** nothing restarts a crashed hosted visor-shell (`visor-session` is replace mode's watchdog); Visor keeps running as a plain bar, and starting visor-shell again brings the task list back. Tray icons stay on Explorer's taskbar; taking over `Shell_TrayWnd` by z-order so they come to the bar is a later option.
 
 ## At sign-in
 
@@ -117,7 +129,7 @@ Windows owns the look, and Visor follows it, the way the taskbar and every app d
 
 The picker lists Windows' themes (`Windows (light)`, `Windows (dark)`, Flow, Glow, ...), the ones Settings saved for you (`%LOCALAPPDATA%\Microsoft\Windows\Themes`, where theme packs unpack too), and six that ship with Visor (`config/themes`): Tokyo Night, Catppuccin Mocha, Catppuccin Latte (light), Nord, Gruvbox and Everforest, all MIT palettes, each a `.theme` with a generated wallpaper (`etc/make-wallpapers.py`) and, Omarchy-style, a matching Windows Terminal scheme in `<name>.terminal.json` beside it. Windows has no convention for terminal palettes, so that part is the one addition: applying such a theme puts the scheme into Terminal's `settings.json` and makes it the default profiles' scheme (keeping the original once as `settings.json.before-visor`); Windows' own themes leave Terminal alone.
 
-Of a `.theme`, Visor applies the wallpaper and its fit, `SystemMode` / `AppMode` and `ColorizationColor` (the registry values Settings writes, followed by the `ImmersiveColorSet` broadcast everything listens for), and records it as Windows' current theme. Sounds, cursors and desktop icons are left alone. A shipped theme names its wallpaper relative to itself, which Windows can't read, so applying one first installs an absolute-path copy in your Windows theme folder; from then on Settings shows and can re-apply it like any other. Drop your own `.theme` (and optional `.terminal.json`) in `%LOCALAPPDATA%\Microsoft\Windows\Themes` to add one. Windows Spotlight (the default theme on a fresh Windows 11) isn't listed: its daily pictures come from Explorer, and its theme file only names a small placeholder, so while it is the current theme in replace mode the desktop shows Windows' own wallpaper for the mode instead. Pick any other theme to change that. The whole switch runs from Visor, so it works the same under Explorer. `visor-wm`'s focused-window border is `accent` by default and follows the accent colour too.
+Of a `.theme`, Visor applies the wallpaper and its fit, `SystemMode` / `AppMode` and `ColorizationColor` (the registry values Settings writes, followed by the `ImmersiveColorSet` broadcast everything listens for), and records it as Windows' current theme. Sounds, cursors and desktop icons are left alone. A shipped theme names its wallpaper relative to itself, which Windows can't read, so applying one first installs an absolute-path copy in your Windows theme folder; from then on Settings shows and can re-apply it like any other. Drop your own `.theme` (and optional `.terminal.json`) in `%LOCALAPPDATA%\Microsoft\Windows\Themes` to add one. Windows Spotlight (the default theme on a fresh Windows 11) isn't listed: its daily pictures come from Explorer, and its theme file only names a small placeholder, so while it is the background in replace mode (by its theme, or by the placeholder being the wallpaper, as after a visit to Settings' Themes page) the desktop shows Windows' own wallpaper for the mode instead. Pick any other theme to change that. The whole switch runs from Visor, so it works the same under Explorer. `visor-wm`'s focused-window border is `accent` by default and follows the accent colour too.
 
 ## Notifications and on-screen display
 
@@ -198,5 +210,5 @@ visor-shell's own, which work even when visor-wm is down:
 | Ctrl+Alt+E | File Explorer (This PC) |
 | Ctrl+Alt+T | Windows Terminal, or cmd if it won't start |
 | Ctrl+Alt+R | Run dialog |
-| Ctrl+Alt+Q | Quit to Explorer |
+| Ctrl+Alt+Q | Quit to Explorer (in hosted mode: quit visor-shell and Visor; `visor-shell --quit` does the same from a script) |
 | Ctrl+Shift+Esc | Task Manager (handled by Windows itself) |

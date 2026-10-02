@@ -3,11 +3,16 @@
 // Two modes (see docs/design.md):
 //   replace  visor-shell is the Winlogon shell (started by visor-session):
 //            owns the desktop window and the shell-ready signal.
-//   hosted   Explorer is the shell; visor-shell runs alongside it. This is the
-//            mode for day-to-day development on a real machine.
+//   hosted   Explorer is the shell; visor-shell runs alongside it (started by
+//            a Run entry, see etc/install.ps1 -Hosted): Explorer's taskbar is
+//            asked to auto-hide and Visor's bar takes its place. This is the
+//            mode for a real machine, where Settings, Store apps and Windows'
+//            own toasts, flyouts and Alt+Tab keep working.
 // The default, auto, picks replace only when no shell window exists yet.
+// Both modes start and supervise Visor; replace mode also runs visor-wm.
 
 #include "common/exitcodes.h"
+#include "common/linkprotocol.h"
 #include "shell/appbars.h"
 #include "shell/desktopwindow.h"
 #include "shell/hotkeys.h"
@@ -15,6 +20,7 @@
 #include "common/launch.h"
 #include "shell/supervisor.h"
 #include "common/log.h"
+#include "shell/taskbar.h"
 #include "shell/tasks.h"
 #include "shell/trayhost.h"
 #include "shell/visorlink.h"
@@ -120,7 +126,20 @@ int main(int argc, char *argv[])
     QCommandLineOption modeOption(QStringLiteral("mode"), QStringLiteral("auto (default), replace or hosted."),
                                   QStringLiteral("mode"), QStringLiteral("auto"));
     parser.addOption(modeOption);
+    QCommandLineOption quitOption(QStringLiteral("quit"),
+                                  QStringLiteral("Ask the running visor-shell to quit, as Ctrl+Alt+Q does."));
+    parser.addOption(quitOption);
     parser.process(app);
+
+    if (parser.isSet(quitOption)) {
+        const HWND running = FindWindowW(visor::link::kShellLinkClass, nullptr);
+        if (!running) {
+            qInfo() << "--quit: no visor-shell is running in this session";
+            return visor::exitcode::Refused;
+        }
+        PostMessageW(running, WM_CLOSE, 0, 0);
+        return 0;
+    }
 
     qInfo() << "visor-shell" << VISOR_VERSION << "starting, pid" << QCoreApplication::applicationPid();
 
@@ -155,11 +174,16 @@ int main(int argc, char *argv[])
     qInfo() << "mode:" << (mode == Mode::Replace ? "replace" : "hosted");
 
     std::unique_ptr<visor::DesktopWindow> desktop;
+    // Hosted: Explorer's taskbar auto-hides for as long as we run, so
+    // Visor's bar is the one on screen (restored when `taskbar` goes).
+    std::unique_ptr<visor::Taskbar> taskbar;
     if (mode == Mode::Replace) {
         desktop = std::make_unique<visor::DesktopWindow>();
         if (!desktop->show())
             return visor::exitcode::Refused;
         signalShellReady();
+    } else {
+        taskbar = std::make_unique<visor::Taskbar>();
     }
 
     // As the shell we also serve app bars and host the tray (Explorer does
@@ -196,18 +220,20 @@ int main(int argc, char *argv[])
             link.send({{QStringLiteral("type"), QStringLiteral("tray.removed")}, {QStringLiteral("id"), id}});
         });
     }
-    // Ctrl+Alt+Q, or Visor's menu: hand the session to Explorer.
+    // Ctrl+Alt+Q, Visor's menu or `visor-shell --quit`: hand the session to
+    // Explorer. Visor goes too, in both modes; a visor-wm run by hand in
+    // hosted mode is the user's to stop.
     const auto quitToExplorer = [&] {
         qInfo() << "quit requested";
-        if (mode == Mode::Replace) {
-            link.stopVisor();
-            // Shows windows hidden on other desktops before Explorer comes.
+        link.stopVisor();
+        // Shows windows hidden on other desktops before Explorer comes.
+        if (mode == Mode::Replace)
             link.sendToWm({{QStringLiteral("type"), QStringLiteral("quit")}});
-        }
         // As the shell, ask visor-session to hand over to Explorer.
         // Hosted, Explorer is already there: just exit.
         QCoreApplication::exit(mode == Mode::Replace ? visor::exitcode::StartExplorer : 0);
     };
+    QObject::connect(&link, &visor::VisorLink::quitRequested, &app, quitToExplorer);
 
     QObject::connect(&link, &visor::VisorLink::messageReceived, &app, [&](const QJsonObject &m) {
         const QString type = m.value(QStringLiteral("type")).toString();
@@ -274,8 +300,9 @@ int main(int argc, char *argv[])
         link.send({{QStringLiteral("type"), QStringLiteral("task.activated")}, {QStringLiteral("hwnd"), qint64(hwnd)}});
     });
 
-    // Under Explorer the user runs Visor themselves; it still connects.
-    link.start(mode == Mode::Replace);
+    // Starts Visor (unless one is already running and connects first, as
+    // when it is run from a terminal) and keeps it running.
+    link.start(true);
 
     // Signing out or shutting down: Winlogon ends every process anyway;
     // leaving first lets Visor and visor-wm close cleanly, and visor-session

@@ -15,7 +15,8 @@
 
 .EXAMPLE
     pwsh etc/vm/deploy.ps1 -Install        # first time: copy + make it the shell
-    pwsh etc/vm/deploy.ps1                 # later: copy + restart the running shell
+    pwsh etc/vm/deploy.ps1 -Hosted         # copy + install hosted mode (Explorer stays) + start it
+    pwsh etc/vm/deploy.ps1                 # later: copy + restart the running shell (either mode)
     pwsh etc/vm/deploy.ps1 -Restore        # emergency: back to Explorer, now
 #>
 [CmdletBinding(DefaultParameterSetName = 'Deploy')]
@@ -27,6 +28,12 @@ param(
     # Also run install.ps1 in the VM (sets the per-user shell).
     [Parameter(ParameterSetName = 'Deploy')]
     [switch] $Install,
+
+    # Also run install.ps1 -Hosted in the VM (a Run entry; Explorer stays the
+    # shell, and the replace-mode override goes), then start visor-shell in
+    # hosted mode on the VM's desktop.
+    [Parameter(ParameterSetName = 'Deploy')]
+    [switch] $Hosted,
 
     # Undo install.ps1 in the VM, stop visor-shell, and start Explorer on the
     # VM's desktop. Copies nothing.
@@ -117,9 +124,26 @@ $vmHelpers = {
         return $false
     }
 
+    # A hosted visor-shell is asked to quit (it puts Explorer's taskbar back
+    # and takes Visor with it); the ask has to come from the user's session.
+    function Stop-HostedShell([string] $Dir) {
+        if (-not (Get-Process visor-shell -ErrorAction SilentlyContinue)) { return }
+        Start-OnDesktop "$Dir\visor-shell.exe" '--quit'
+        $deadline = (Get-Date).AddSeconds(5)
+        while ((Get-Date) -lt $deadline -and (Get-Process visor-shell -ErrorAction SilentlyContinue)) {
+            Start-Sleep -Milliseconds 250
+        }
+        Stop-Visor # whatever didn't go
+    }
+
     function Test-Installed {
         $shell = (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows NT\CurrentVersion\Winlogon' -Name Shell -ErrorAction SilentlyContinue).Shell
         return $shell -like '*visor-session.exe*'
+    }
+
+    function Test-InstalledHosted {
+        $run = (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name visor-shell -ErrorAction SilentlyContinue).'visor-shell'
+        return [bool]$run
     }
 }
 
@@ -127,12 +151,17 @@ try {
     Invoke-Command -Session $session -ScriptBlock $vmHelpers
 
     if ($Restore) {
+        Invoke-Command -Session $session -ScriptBlock {
+            if (Test-InstalledHosted) { Stop-HostedShell $using:Target }
+        }
         Invoke-Command -Session $session -FilePath "$Root\etc\uninstall.ps1"
         Invoke-Command -Session $session -ScriptBlock {
             Stop-Visor | Out-Null
             # With no shell window left, a bare explorer.exe becomes the shell.
-            # (If Explorer already is the shell, this just opens a folder.)
-            Start-OnDesktop 'C:\Windows\explorer.exe'
+            # (Hosted, Explorer is there already.)
+            if (-not (Get-Process explorer -ErrorAction SilentlyContinue)) {
+                Start-OnDesktop 'C:\Windows\explorer.exe'
+            }
         }
         return
     }
@@ -145,6 +174,11 @@ try {
     }
 
     $wasRunning = Invoke-Command -Session $session -ScriptBlock { [bool](Get-Process visor-shell -ErrorAction SilentlyContinue) }
+    # A hosted shell is stopped before the copy (a clean quit, so the
+    # taskbar comes back) and started again on the new build below.
+    $wasHosted = Invoke-Command -Session $session -ScriptBlock {
+        if (Test-InstalledHosted) { Stop-HostedShell $using:Target; $true } else { $false }
+    }
 
     # Everything the build put next to the exes (Qt runtime, QML modules,
     # plugins, the default config, PDBs), minus CMake/Ninja's own files.
@@ -171,10 +205,32 @@ try {
 
     if ($Install) {
         Invoke-Command -Session $session -FilePath "$Root\etc\install.ps1" -ArgumentList "$Target\visor-session.exe"
+    } elseif ($Hosted) {
+        # The copied script, so the switch can be passed (-ArgumentList can't).
+        Invoke-Command -Session $session -ScriptBlock {
+            Set-ExecutionPolicy -Scope Process Bypass -Force
+            & "$using:Target\install.ps1" -Path "$using:Target\visor-session.exe" -Hosted
+        }
     }
 
     $installed = Invoke-Command -Session $session -ScriptBlock { Test-Installed }
-    if ($installed -and $wasRunning) {
+    if ($Hosted -or ($wasHosted -and $wasRunning)) {
+        Invoke-Command -Session $session -ScriptBlock {
+            if ($using:wasRunning -and -not $using:wasHosted) {
+                # A replace-mode shell was running. With the override gone,
+                # Winlogon brings Explorer when it dies; give the taskbar a
+                # moment before asking it to auto-hide.
+                Stop-Visor
+                $deadline = (Get-Date).AddSeconds(10)
+                while ((Get-Date) -lt $deadline -and -not (Get-Process explorer -ErrorAction SilentlyContinue)) {
+                    Start-Sleep -Milliseconds 250
+                }
+                if (-not (Get-Process explorer -ErrorAction SilentlyContinue)) { Start-OnDesktop 'C:\Windows\explorer.exe' }
+                Start-Sleep -Seconds 3
+            }
+            Start-OnDesktop "$using:Target\visor-shell.exe" '--mode hosted'
+        }
+    } elseif ($installed -and $wasRunning) {
         # Restart onto the new build: Winlogon relaunches the shell once
         # visor-shell exits. Start it ourselves if that doesn't happen.
         Invoke-Command -Session $session -ScriptBlock {

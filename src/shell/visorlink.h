@@ -52,6 +52,8 @@ signals:
     void messageReceived(const QJsonObject &message);
     // A message from visor-wm (desktop state, key bindings, a command for Visor).
     void wmMessageReceived(const QJsonObject &message);
+    // `visor-shell --quit` closed the link window: quit as Ctrl+Alt+Q does.
+    void quitRequested();
 
 private:
     void launch();

@@ -3,8 +3,10 @@ import Visor
 
 // The system menu, like the "Shut down or sign out" part of Windows' Win+X
 // menu: lock, sign out, sleep, restart, shut down, and, with visor-shell,
-// quitting to Explorer; plus the Windows theme picker (Omarchy's menu has one
-// too; Windows keeps it in Settings). Opens under the bar's launcher button
+// quitting (to Explorer in replace mode; in hosted mode Explorer is there
+// already, so it is just Visor and visor-shell that go); plus the Windows
+// theme picker (Omarchy's menu has one too; Windows keeps it in Settings).
+// Opens under the bar's launcher button
 // (right-click it) or with Win+X. Up/Down and Enter, or click; Esc closes.
 PopupWindow {
     id: menu
@@ -24,8 +26,10 @@ PopupWindow {
             { glyph: "", text: "Restart", action: () => Shell.restart() },
             { glyph: "", text: "Shut down", action: () => Shell.shutDown() },
         ]
-        if (Shell.available)
-            list.push({ glyph: "", text: "Quit to Explorer", action: () => Shell.quitToExplorer() })
+        if (Shell.available) {
+            list.push({ glyph: "\uEC50", text: Shell.replacingExplorer ? "Quit to Explorer" : "Quit Visor",
+                        action: () => Shell.quitToExplorer() })
+        }
         return list
     }
 

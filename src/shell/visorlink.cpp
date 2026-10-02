@@ -215,6 +215,12 @@ void VisorLink::sendToWm(const QJsonObject &message)
 std::intptr_t VisorLink::handleMessage(void *window, unsigned msg, std::uintptr_t wParam, std::intptr_t lParam)
 {
     const auto hwnd = static_cast<HWND>(window);
+    if (msg == WM_CLOSE) {
+        // From `visor-shell --quit` (scripts); DefWindowProc would destroy
+        // the window instead.
+        QMetaObject::invokeMethod(this, &VisorLink::quitRequested, Qt::QueuedConnection);
+        return 0;
+    }
     if (msg != WM_COPYDATA)
         return DefWindowProcW(hwnd, msg, WPARAM(wParam), LPARAM(lParam));
 
