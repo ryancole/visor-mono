@@ -18,8 +18,7 @@ PanelWindow {
         precision: SystemClock.Minutes
     }
 
-    // Left: desktops and open windows (with visor-shell / visor-wm) and the
-    // focused app.
+    // Left: desktops and open windows (with visor-shell / visor-wm).
     Row {
         id: left
         anchors.left: parent.left
@@ -39,7 +38,7 @@ PanelWindow {
 
             Icon {
                 anchors.centerIn: parent
-                glyph: "" // AllApps
+                glyph: "\uE71D" // AllApps
                 color: Theme.accent
                 font.pixelSize: 16
             }
@@ -64,23 +63,6 @@ PanelWindow {
 
         TaskList {
             anchors.verticalCenter: parent.verticalCenter
-        }
-
-        Rectangle {
-            visible: ActiveWindow.appName !== ""
-            anchors.verticalCenter: parent.verticalCenter
-            width: appLabel.implicitWidth + 16
-            height: 20
-            radius: 10
-            color: Theme.surface
-
-            Label {
-                id: appLabel
-                anchors.centerIn: parent
-                text: ActiveWindow.appName
-                color: Theme.accent
-                font.weight: Font.DemiBold
-            }
         }
     }
 
