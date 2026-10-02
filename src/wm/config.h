@@ -65,8 +65,11 @@ struct Binding
 // Supported:
 //   # comments (## is a literal #)
 //   $name = value              variables, used as $name in later values
+//   source = file               reads another file here (~ and %VAR% expand;
+//                               relative to this file; skipped if missing)
 //   section { key = value }     the same as section:key = value
 //   general:gaps_in, gaps_out, border_size, col.active_border, col.inactive_border
+//     (colours as rgb(rrggbb), rgba(rrggbbaa), 0xaarrggbb, or accent)
 //   dwindle:default_split_ratio, preserve_split, force_split
 //   windowrule = float|tile, class:<regex>, title:<regex>, exe:<regex>
 //   bind, bindd, binde, ... (see Binding)
@@ -78,15 +81,25 @@ struct Config
     // 0 turns border colouring off. Windows always draws 1 px borders, so
     // other sizes only mean "on".
     int borderSize = 2;
-    quint32 activeBorder = 0x33ccff;   // 0xRRGGBB
-    quint32 inactiveBorder = 0x595959; // 0xRRGGBB
+    // A border colour is 0xRRGGBB, or `accent`: Windows' accent colour,
+    // followed as it changes (the default for the focused window, as
+    // Windows' own "show accent colour on borders" draws it).
+    struct BorderColor
+    {
+        bool accent = false;
+        quint32 rgb = 0x595959;
+    };
+    BorderColor activeBorder{true, 0x0078d4};
+    BorderColor inactiveBorder{false, 0x595959};
     DwindleLayout::Options dwindle;
     QList<WindowRule> rules;
     QList<Binding> bindings;
 
-    QStringList errors; // "line N: message"
+    QStringList errors;  // "line N: message"
+    QStringList sources; // every `source` file, present or not, for watching
 
-    static Config parse(const QString &text);
+    // baseDir resolves relative `source` paths.
+    static Config parse(const QString &text, const QString &baseDir = {});
     static Config load(const QString &path);
 };
 

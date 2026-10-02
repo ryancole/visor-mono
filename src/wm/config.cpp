@@ -2,6 +2,7 @@
 
 #include <QCoreApplication>
 #include <QDir>
+#include <QRegularExpression>
 #include <QFile>
 #include <QFileInfo>
 #include <QHash>
@@ -59,6 +60,16 @@ bool parseColor(const QString &value, quint32 *out)
             *out = argb & 0xffffff;
     }
     return ok;
+}
+
+bool parseBorderColor(const QString &value, Config::BorderColor *out)
+{
+    if (value.trimmed().compare(QLatin1String("accent"), Qt::CaseInsensitive) == 0) {
+        out->accent = true;
+        return true;
+    }
+    out->accent = false;
+    return parseColor(value, &out->rgb);
 }
 
 QString substitute(QString value, const QHash<QString, QString> &variables)
@@ -280,28 +291,43 @@ bool parseBinding(const QString &flags, const QString &value, Binding *binding, 
     return true;
 }
 
-} // namespace
-
-bool WindowRule::matches(const QString &cls, const QString &windowTitle, const QString &exeName) const
+// Parsing state shared across a file and the files it sources: variables
+// carry over, and binding groups continue.
+struct ParseState
 {
-    const auto test = [](const QRegularExpression &re, const QString &s) {
-        return re.pattern().isEmpty() || re.match(s).hasMatch();
-    };
-    return test(windowClass, cls) && test(title, windowTitle) && test(exe, exeName);
-}
-
-Config Config::parse(const QString &text)
-{
-    Config config;
     QHash<QString, QString> variables;
-    QStringList sections;
     int group = 0;
     bool inGroup = false; // the previous line was a binding
+    int depth = 0;        // of `source` nesting
+};
+
+// `source = file` (Hyprland's include): ~ and %VAR% expanded, relative to the
+// sourcing file. A missing file is skipped quietly, so wm.conf can source
+// current/wm.conf before any theme has been applied.
+QString resolveSource(QString value, const QString &baseDir)
+{
+    if (value.startsWith(QLatin1String("~/")) || value == QLatin1String("~"))
+        value = QDir::home().filePath(value.mid(2));
+    static const QRegularExpression envVar(QStringLiteral("%([^%]+)%"));
+    QRegularExpressionMatch m;
+    while ((m = envVar.match(value)).hasMatch())
+        value.replace(m.capturedStart(), m.capturedLength(), qEnvironmentVariable(m.captured(1).toUtf8().constData()));
+    const QFileInfo info(value);
+    if (info.isRelative() && !baseDir.isEmpty())
+        return QDir::cleanPath(QDir(baseDir).absoluteFilePath(value));
+    return QDir::cleanPath(info.absoluteFilePath());
+}
+
+void parseInto(Config &config, ParseState &state, const QString &text, const QString &baseDir, const QString &label)
+{
+    QStringList sections;
+    int &group = state.group;
+    bool &inGroup = state.inGroup;
 
     const QStringList lines = text.split(QLatin1Char('\n'));
     for (qsizetype n = 0; n < lines.size(); ++n) {
         const auto fail = [&](const QString &message) {
-            config.errors.append(QStringLiteral("line %1: %2").arg(n + 1).arg(message));
+            config.errors.append(label + QStringLiteral("line %1: %2").arg(n + 1).arg(message));
         };
 
         // '#' starts a comment; '##' is a literal '#' (as in Hyprland), e.g.
@@ -346,13 +372,29 @@ Config Config::parse(const QString &text)
             continue;
         }
         QString key = line.left(eq).trimmed();
-        const QString value = substitute(line.mid(eq + 1).trimmed(), variables);
+        const QString value = substitute(line.mid(eq + 1).trimmed(), state.variables);
 
         if (key.startsWith(QLatin1Char('$'))) {
-            variables.insert(key.mid(1), value);
+            state.variables.insert(key.mid(1), value);
             continue;
         }
         key = key.toLower();
+        if (key == QLatin1String("source") && sections.isEmpty()) {
+            const QString path = resolveSource(value, baseDir);
+            config.sources.append(path);
+            if (state.depth >= 8) {
+                fail(QStringLiteral("source nested too deeply: %1").arg(path));
+                continue;
+            }
+            QFile file(path);
+            if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
+                continue; // not there (yet)
+            ++state.depth;
+            parseInto(config, state, QString::fromUtf8(file.readAll()), QFileInfo(path).absolutePath(),
+                      QDir::toNativeSeparators(path) + QStringLiteral(": "));
+            --state.depth;
+            continue;
+        }
         if (!sections.isEmpty())
             key = sections.join(QLatin1Char(':')) + QLatin1Char(':') + key;
 
@@ -364,9 +406,9 @@ Config Config::parse(const QString &text)
         } else if (key == QLatin1String("general:border_size")) {
             ok = parseInt(value, &config.borderSize);
         } else if (key == QLatin1String("general:col.active_border")) {
-            ok = parseColor(value, &config.activeBorder);
+            ok = parseBorderColor(value, &config.activeBorder);
         } else if (key == QLatin1String("general:col.inactive_border")) {
-            ok = parseColor(value, &config.inactiveBorder);
+            ok = parseBorderColor(value, &config.inactiveBorder);
         } else if (key == QLatin1String("general:layout")) {
             ok = value == QLatin1String("dwindle");
         } else if (key == QLatin1String("dwindle:default_split_ratio")) {
@@ -407,7 +449,24 @@ Config Config::parse(const QString &text)
             fail(QStringLiteral("bad value for %1: %2").arg(key, value));
     }
     if (!sections.isEmpty())
-        config.errors.append(QStringLiteral("unclosed section %1").arg(sections.last()));
+        config.errors.append(label + QStringLiteral("unclosed section %1").arg(sections.last()));
+}
+
+} // namespace
+
+bool WindowRule::matches(const QString &cls, const QString &windowTitle, const QString &exeName) const
+{
+    const auto test = [](const QRegularExpression &re, const QString &s) {
+        return re.pattern().isEmpty() || re.match(s).hasMatch();
+    };
+    return test(windowClass, cls) && test(title, windowTitle) && test(exe, exeName);
+}
+
+Config Config::parse(const QString &text, const QString &baseDir)
+{
+    Config config;
+    ParseState state;
+    parseInto(config, state, text, baseDir, QString());
     return config;
 }
 
@@ -419,7 +478,7 @@ Config Config::load(const QString &path)
         config.errors.append(QStringLiteral("cannot read %1: %2").arg(path, file.errorString()));
         return config;
     }
-    return parse(QString::fromUtf8(file.readAll()));
+    return parse(QString::fromUtf8(file.readAll()), QFileInfo(path).absolutePath());
 }
 
 QString resolveConfigPath(const QString &explicitPath)

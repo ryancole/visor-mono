@@ -58,6 +58,7 @@ public:
     // bindings take effect at once. Rules apply to windows as they open, as
     // in Hyprland.
     void setConfig(Config config);
+    const Config &config() const { return m_config; }
 
     // Called from the WinEvent hook / the hidden window's procedure.
     void handleEvent(unsigned event, quintptr hwnd);
@@ -122,6 +123,10 @@ private:
 
     void focusChanged(quintptr hwnd);
     void colorBorder(quintptr hwnd, bool active);
+    // The configured colour, with `accent` resolved to Windows' current one.
+    quint32 borderColor(bool active) const;
+    // Re-reads Windows' accent colour; recolours the borders if it changed.
+    void refreshAccent();
 
     // Desktops.
     void activateDesktop(int index);
@@ -156,6 +161,7 @@ private:
     quintptr neighbor(const Rect &from, Direction direction, quintptr exclude) const;
 
     Config m_config;
+    quint32 m_accent = 0x0078d4; // Windows' accent colour, 0xRRGGBB
     void *m_hwnd = nullptr; // hidden window: broadcasts, hotkeys, messages from the shell
     QList<void *> m_hooks;
     QHash<QString, Monitor> m_monitors;          // by device name, e.g. \\.\DISPLAY1

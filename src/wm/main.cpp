@@ -18,7 +18,6 @@
 
 #include <QCommandLineParser>
 #include <QCoreApplication>
-#include <QDateTime>
 #include <QElapsedTimer>
 #include <QDebug>
 #include <QFileInfo>
@@ -125,30 +124,68 @@ int main(int argc, char *argv[])
         });
     }
 
-    // Live reload. Editors often save by replacing the file, which drops it
-    // from the watcher, so the folder is watched too and the file re-added.
+    // Live reload of wm.conf and the files it sources (the theme's border
+    // colours in ~/.config/visor/current/wm.conf). Editors often save by
+    // replacing a file, which drops it from the watcher, so folders are
+    // watched too and files re-added. A sourced file that doesn't exist yet
+    // is watched through its nearest existing parent folder, so the first
+    // theme ever applied is picked up as well.
     QFileSystemWatcher watcher;
     QTimer reloadTimer;
-    QDateTime lastModified = QFileInfo(configPath).lastModified();
+    QStringList watched;  // wm.conf and its sources
+    QStringList snapshot; // "path|mtime|size" of each, for change detection
+    const auto stamp = [](const QStringList &files) {
+        QStringList entries;
+        for (const QString &file : files) {
+            const QFileInfo info(file);
+            entries << QStringLiteral("%1|%2|%3")
+                           .arg(file)
+                           .arg(info.exists() ? info.lastModified().toMSecsSinceEpoch() : 0)
+                           .arg(info.exists() ? info.size() : -1);
+        }
+        return entries;
+    };
+    const auto rewatch = [&](const QStringList &files) {
+        watched = files;
+        snapshot = stamp(files);
+        if (!watcher.files().isEmpty())
+            watcher.removePaths(watcher.files());
+        if (!watcher.directories().isEmpty())
+            watcher.removePaths(watcher.directories());
+        QStringList paths;
+        for (const QString &file : files) {
+            if (QFileInfo::exists(file))
+                paths << file;
+            // The nearest folder that exists (QDir::cdUp won't step into a
+            // missing parent, so walk the path instead).
+            QString dir = QFileInfo(file).absolutePath();
+            while (!QFileInfo::exists(dir)) {
+                const QString parent = QFileInfo(dir).absolutePath();
+                if (parent == dir)
+                    break;
+                dir = parent;
+            }
+            paths << dir;
+        }
+        paths.removeDuplicates();
+        watcher.addPaths(paths);
+        qInfo().noquote() << "watching" << paths.join(QLatin1String(", "));
+    };
     reloadTimer.setSingleShot(true);
     reloadTimer.setInterval(kReloadDelayMs);
     if (!configPath.isEmpty()) {
-        watcher.addPath(configPath);
-        watcher.addPath(QFileInfo(configPath).absolutePath());
+        rewatch(QStringList{configPath} + manager->config().sources);
         const auto changed = [&] { reloadTimer.start(); };
         QObject::connect(&watcher, &QFileSystemWatcher::fileChanged, &app, changed);
         QObject::connect(&watcher, &QFileSystemWatcher::directoryChanged, &app, changed);
         QObject::connect(&reloadTimer, &QTimer::timeout, &app, [&] {
-            if (!QFileInfo::exists(configPath))
+            if (stamp(watched) == snapshot) {
+                rewatch(watched); // something else in a folder changed; re-arm
                 return;
-            if (!watcher.files().contains(configPath))
-                watcher.addPath(configPath);
-            const QDateTime modified = QFileInfo(configPath).lastModified();
-            if (modified == lastModified)
-                return; // another file in the folder changed
-            lastModified = modified;
+            }
             qInfo() << "reloading config";
             manager->setConfig(loadConfig(configPath));
+            rewatch(QStringList{configPath} + manager->config().sources);
         });
     }
 

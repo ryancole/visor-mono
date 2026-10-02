@@ -24,7 +24,7 @@ Row {
             height: 20
             radius: 10
             color: active ? Theme.accent
-                 : mouse.containsMouse ? "#33ffffff" : Theme.surface
+                 : mouse.containsMouse ? Theme.hover : Theme.surface
             Behavior on width { NumberAnimation { duration: 120 } }
 
             Label {

@@ -1,0 +1,24 @@
+; Catppuccin Mocha for Visor: a Windows theme (wallpaper, mode, accent) after Catppuccin (https://github.com/catppuccin/catppuccin, MIT).
+; The wallpaper path is relative to this file (Visor's addition; Windows wants an
+; absolute one, so Visor installs an absolute-path copy when applying it).
+; catppuccin-mocha.terminal.json next to it is the matching Windows Terminal scheme.
+
+[Theme]
+DisplayName=Catppuccin Mocha
+
+[Control Panel\Desktop]
+Wallpaper=catppuccin-mocha.png
+TileWallpaper=0
+WallpaperStyle=10
+
+[VisualStyles]
+Path=%SystemRoot%\resources\themes\Aero\Aero.msstyles
+ColorStyle=NormalColor
+Size=NormalSize
+AutoColorization=0
+ColorizationColor=0XC489B4FA
+SystemMode=Dark
+AppMode=Dark
+
+[MasterThemeSelector]
+MTSM=DABJDKT

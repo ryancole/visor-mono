@@ -25,7 +25,7 @@ Row {
             radius: 6
             color: flashing ? Theme.accent
                  : active ? Theme.surface
-                 : mouse.containsMouse ? "#14ffffff" : "transparent"
+                 : mouse.containsMouse ? Theme.hover : "transparent"
 
             Image {
                 anchors.centerIn: parent

@@ -24,7 +24,9 @@ visor loads the first of:
 4. `src/bar/config/shell.qml` (debug builds only)
 5. `config/shell.qml` next to the exe (the default config)
 
-Copy `src/bar/config` to `~/.config/visor` to start customising.
+Copy `src/bar/config` to `~/.config/visor` to start customising. Colours follow
+Windows' dark/light mode and accent (see [Themes](../../README.md#themes));
+`Theme.qml` turns them into the config's palette and holds the fonts and sizes.
 
 Run it from a terminal to see logs and QML errors.
 
@@ -59,7 +61,8 @@ config can put them in the bar itself.
 | `Tasks` | singleton model | Open app windows, from [visor-shell](../shell) (empty without it; `available` says which). Roles: `hwnd`, `title`, `appName`, `processPath`, `active`, `flashing`, `icon` (an `image://` URL). `activate(hwnd)` (focus, or minimise if focused), `minimize(hwnd)`, `close(hwnd)`. |
 | `Apps` | singleton model | The installed apps (`shell:AppsFolder`) matching `query`, best first; recently opened first for an empty query. Roles: `key`, `name`, `id`, `icon` (an `image://` URL), `packaged`, `launchable` (false for UWP apps in replace mode), `recent`. `launch(row, asAdmin = false)`, `refresh()`, `ready`, `count`. |
 | `KeyBindings` | singleton model | visor-wm's key bindings, for a cheat sheet (empty without it). Roles: `keys` ("SUPER+Return"), `label` ("Win + Enter"), `description`, `dispatcher`, `argument`, `group`. `groupCount`, `group(n)` (the n-th group as `{label, description}` objects). |
-| `Shell` | singleton | The session: `available`, `mode` (`"replace"`, `"hosted"` or `""`), `replacingExplorer`; signal `command(name)` for the `visor` key bindings in `wm.conf`; `run(commandLine)`, `showRunDialog()`, `lock()`, `signOut()`, `sleep()`, `restart()`, `shutDown()`, `quitToExplorer()`. |
+| `Shell` | singleton | The session: `available`, `mode` (`"replace"`, `"hosted"` or `""`), `replacingExplorer`; signal `command(name)` for the `visor` key bindings in `wm.conf` (e.g. `"launcher"`, `"theme next"`); `run(commandLine)`, `showRunDialog()`, `lock()`, `signOut()`, `sleep()`, `restart()`, `shutDown()`, `quitToExplorer()`. |
+| `Themes` | singleton model | Windows' personalisation, and the `.theme` files to switch it with (Windows' own, the user's, and Visor's shipped ones). Colours derived from Windows' mode and accent, live: `light`, `appsLight`, `background`, `surface`, `text`, `subtext`, `accent`, `wallpaper`. Roles: `key` (the `.theme` path), `name`, `light`, `accent`, `wallpaper`, `current`, `source` (`"Windows"`, `"Visor"` or `""`). Properties `count`, `current` (path), `currentName`. `apply(keyOrName)` does what picking the theme in Settings does (plus the Terminal scheme for Visor's themes); `next()`, `previous()`, `indexOf(keyOrName)`, `refresh()`. |
 
 One bar per monitor:
 
@@ -88,13 +91,13 @@ ShellRoot {
 }
 ```
 
-The default config adds `Launcher.qml`, `SystemMenu.qml` and `CheatSheet.qml` (each a `PopupWindow`), opened from `shell.qml` when `Shell.command` names them (`launcher`, `menu`, `keys`; `run` shows the Run dialog) and from the button at the left of `Bar.qml`.
+The default config adds `Launcher.qml`, `SystemMenu.qml`, `CheatSheet.qml` and `ThemePicker.qml` (each a `PopupWindow`), opened from `shell.qml` when `Shell.command` names them (`launcher`, `menu`, `keys`, `theme`; `run` shows the Run dialog, `theme next` / `theme <name>` switch themes) and from the button at the left of `Bar.qml`.
 
 ## Layout
 
 ```
 src/bar/            C++ sources and CMake for visor.exe
-src/bar/config/     The default QML config
+src/bar/config/     The default QML config, wm.conf, and the shipped themes (themes/*.theme)
 src/bar/resources/  Icon and Windows resource script
 src/bar/services/   System data services exposed to QML
 ```

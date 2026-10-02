@@ -324,4 +324,21 @@ void resetBorderColor(quintptr hwnd)
     DwmSetWindowAttribute(toHwnd(hwnd), kBorderColor, &color, sizeof(color));
 }
 
+quint32 accentColor()
+{
+    // The value Settings writes (0xAABBGGRR) and that DWM and every app read
+    // on the "ImmersiveColorSet" broadcast. DwmGetColorizationColor lags it.
+    DWORD value = 0;
+    DWORD size = sizeof(value);
+    if (RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\DWM", L"AccentColor", RRF_RT_REG_DWORD,
+                     nullptr, &value, &size) == ERROR_SUCCESS) {
+        return ((value & 0xff) << 16) | (value & 0xff00) | ((value >> 16) & 0xff);
+    }
+    DWORD argb = 0;
+    BOOL opaque = FALSE;
+    if (SUCCEEDED(DwmGetColorizationColor(&argb, &opaque)))
+        return argb & 0xffffff;
+    return 0x0078d4; // Windows' default blue
+}
+
 } // namespace visor::wm::win

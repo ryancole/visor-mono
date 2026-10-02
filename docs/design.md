@@ -13,7 +13,7 @@ Tags used below: **[V]** = confirmed by a source (Microsoft docs, or ManagedShel
 | Hyprland: tiling, workspaces, key bindings | `visor-wm` | §4, Phase 3 |
 | Waybar | Visor | Exists |
 | Walker launcher, Omarchy menu, keybinding cheat sheet | Visor QML launcher and menu | Phase 4 |
-| One-switch themes (bar, terminal, wallpaper…) | Theme service | Phase 5 |
+| One-switch themes (bar, terminal, wallpaper…) | Windows themes, followed and switched by Visor | §4 "Theming", Phase 5 |
 | mako notifications, SwayOSD | Visor overlays | Phase 6 |
 | The session itself (what Explorer quietly does on Windows) | `visor-shell` | §1, Phases 1–2 |
 
@@ -125,6 +125,16 @@ The launcher, the power menu and the key-binding cheat sheet are QML in Visor (`
 
 The power menu's actions run in Visor (`LockWorkStation`, `ExitWindowsEx` with `SE_SHUTDOWN_NAME`, `SetSuspendState`); "Quit to Explorer" sends `{"type":"shell.quit"}` to the shell, the same path as Ctrl+Alt+Q. Win+R shows shell32's Run dialog from Visor, after taking the foreground.
 
+### Theming (Phase 5, done)
+
+**Windows is the source of truth.** On Windows the theme belongs to Windows: Personalization owns the wallpaper, the dark/light mode and the accent colour, every app follows them through `UISettings` and the `"ImmersiveColorSet"` `WM_SETTINGCHANGE` broadcast, and a theme is a `.theme` file naming those three. So Visor and visor-wm are followers, like the taskbar is, and the unit of switching is a `.theme` file. (A first cut had Visor own a palette of its own, Omarchy-style, and push it onto Windows; it was replaced because it inverted the platform's model.)
+
+- **Following.** `Themes` (`services/themes.cpp`) reads `SystemUsesLightTheme` / `AppsUseLightTheme`, the accent through `UISettings`, and the wallpaper, and derives the bar's palette the way the taskbar's is derived: Windows 11's dark or light surfaces and text, the accent for highlights. A `QAbstractNativeEventFilter` sees the `ImmersiveColorSet` and `SPI_SETDESKWALLPAPER` broadcasts and `WM_DWMCOLORIZATIONCOLORCHANGED` on Visor's own windows and re-reads. The config's `Theme.qml` builds on `Themes.background` etc., so bindings update live with no QML reload. visor-wm does the same for its borders: `col.active_border = accent` (the default) is resolved from Windows' accent and refreshed on the same broadcasts.
+- **Themes are `.theme` files** (`common/theme.cpp`): Windows' own (`%SystemRoot%\Resources\Themes`), the user's (`%LOCALAPPDATA%\Microsoft\Windows\Themes`, one subfolder deep for unpacked theme packs; Settings' `Custom.theme` only while current) and the shipped ones (`config/themes`), read with the profile API, `DisplayName` resource strings resolved with `SHLoadIndirectString`. `CurrentTheme` in the registry says which is active. Applying one does what Settings does: `WallpaperStyle` / `TileWallpaper` and `SPI_SETDESKWALLPAPER`, the `Personalize`, `Explorer\Accent` and `DWM` values for mode and accent, `CurrentTheme`, then the broadcast. Verified in the VM: Notepad and Terminal switch mode, WinUI controls and DWM take the accent, visor-shell's desktop repaints. Sounds, cursors and desktop icons are not applied.
+- **Two additions of ours.** A `Wallpaper` path relative to the `.theme` (so themes can ship next to the exe); applying such a theme first installs an absolute-path copy, with a `VisorSource` line, in the user's theme folder, and that copy stands in for the shipped file in the list. And `<name>.terminal.json` beside a `.theme`: a Windows Terminal scheme object, written into every `settings.json` found and set as `profiles.defaults.colorScheme` (JSONC comments stripped; the original kept once as `.before-visor`). Windows has no convention for terminal palettes; this one is Omarchy's. Windows' own themes leave Terminal alone.
+- **Shipped themes:** Tokyo Night, Catppuccin Mocha and Latte, Nord, Gruvbox, Everforest (MIT palettes, credited in each file). Omarchy's background images have no clear provenance, so `etc/make-wallpapers.py` renders a gradient from each theme's Terminal background and accent instead (committed).
+- **Switcher:** `ThemePicker.qml` (a `PopupWindow` with wallpaper previews, from the Win+X menu's **Themes** row or `visor, theme`), `visor, theme next` on Super+Ctrl+Shift+Space (Omarchy's key; `RegisterHotKey` accepts it), `visor, theme <name or path>`. Under Explorer the picker's last row opens `ms-settings:themes`, since Settings is where Windows keeps the rest. Everything runs from Visor, so it is the same in replace mode, hosted mode and plain Visor; hosted mode has not been tested in the VM.
+
 ## 5. Safety and test environment
 
 - **Development happens in a Hyper-V VM only. The host's registry is never touched.** The install script refuses to run on any machine unless `-IAmInAVm` is passed or it detects a Hyper-V guest.
@@ -183,9 +193,9 @@ Session work runs alongside Phases 2–3:
 - A keybinding cheat sheet (Super+K).
 - Win+R opens the Run dialog; Win+E was already in `wm.conf`.
 
-**Phase 5: theming.**
-- One theme file drives Visor QML, the wallpaper, Windows dark mode and accent, and the Windows Terminal scheme.
-- A theme switcher in the menu.
+**Phase 5: theming.** Done; see §4 "Theming".
+- Windows' theme (a `.theme` file: wallpaper, dark/light mode, accent) drives Visor QML, visor-wm's borders and, for Visor's themes, the Windows Terminal scheme.
+- A theme switcher in the menu, and Super+Ctrl+Shift+Space for the next theme.
 
 **Phase 6: notifications and OSD.**
 - Volume and brightness OSD.

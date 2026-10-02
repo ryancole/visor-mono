@@ -70,6 +70,8 @@ bool moveTo(quintptr hwnd, const Rect &rect);
 // the system default with resetBorderColor. No-op on Windows 10.
 void setBorderColor(quintptr hwnd, quint32 rgb);
 void resetBorderColor(quintptr hwnd);
+// Windows' accent colour (what Settings > Colors sets), 0xRRGGBB.
+quint32 accentColor();
 
 } // namespace win
 } // namespace visor::wm

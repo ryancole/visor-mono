@@ -5,12 +5,12 @@ Omarchy-style desktop: tiling, keyboard-driven, themeable. Native C++ and Qt,
 event-driven, small. It can run as a plain app under Explorer, or replace
 `explorer.exe` as the Windows shell.
 
-Status: **phase 4**: the app launcher, power menu and key-binding cheat sheet in Visor, on top of phase 3's Hyprland-style tiling, key bindings and Windows-style virtual desktops (`visor-wm`) and phase 2's desktop, wallpaper, task list and tray, app bars and work areas, fullscreen detection and Visor supervision. Phase 0 results (what breaks without Explorer) are in [docs/phase0-compat.md](docs/phase0-compat.md).
+Status: **phase 5**: Windows themes, followed and switched by Visor (bar, wallpaper, dark/light mode, accent, window borders and the Terminal scheme in one go), on top of phase 4's app launcher, power menu and key-binding cheat sheet in Visor, phase 3's Hyprland-style tiling, key bindings and Windows-style virtual desktops (`visor-wm`) and phase 2's desktop, wallpaper, task list and tray, app bars and work areas, fullscreen detection and Visor supervision. Phase 0 results (what breaks without Explorer) are in [docs/phase0-compat.md](docs/phase0-compat.md).
 See [docs/design.md](docs/design.md) for the architecture and plan.
 
 | Program | Source | What it is |
 | --- | --- | --- |
-| `visor.exe` | [`src/bar`](src/bar) | The status bar, launcher and menus, configured in QML (live reload). It draws all of the UI. It works on its own under Explorer; with visor-shell it also shows tasks and the tray. See [src/bar/README.md](src/bar/README.md) for config and the QML API. |
+| `visor.exe` | [`src/bar`](src/bar) | The status bar, launcher, menus and theme switcher, configured in QML (live reload). It draws all of the UI. It works on its own under Explorer; with visor-shell it also shows tasks and the tray. See [src/bar/README.md](src/bar/README.md) for config and the QML API. |
 | `visor-session.exe` | [`src/session`](src/session) | What Windows starts at sign-in. Plain Win32, static CRT, no Qt. Starts `visor-shell`, restarts it after a crash, and falls back to Explorer when it can't run. |
 | `visor-shell.exe` | [`src/shell`](src/shell) | Shell services: desktop and wallpaper, the shell-ready signal, hotkeys, window (task) tracking, the notification area (`Shell_TrayWnd`), the app bar server, and starting and supervising Visor and visor-wm. Draws no UI of its own. Visor does that, over the link in [`src/common/linkprotocol.h`](src/common/linkprotocol.h). |
 | `visor-wm.exe` | [`src/wm`](src/wm) | The tiling window manager, in Hyprland's role: tiles app windows with the dwindle layout inside the space Visor's bar leaves. Configured by a `hyprland.conf`-style `wm.conf`. See [Window manager](#window-manager). |
@@ -56,12 +56,12 @@ bar's default config land in one folder, `build/<preset>/`.
 ## Layout
 
 ```
-src/bar/        visor.exe: C++ sources, QML types, the default config (src/bar/config)
+src/bar/        visor.exe: C++ sources, QML types, the default config and the shipped themes (src/bar/config)
 src/shell/      visor-shell.exe
 src/session/    visor-session.exe
 src/wm/         visor-wm.exe (its default wm.conf ships in src/bar/config)
 src/common/     Code shared by all of them (exit codes, logging, the shell <-> bar link)
-etc/            Scripts: bootstrap, build, install/uninstall, icon generator
+etc/            Scripts: bootstrap, build, install/uninstall, icon and wallpaper generators
 etc/vm/         Test VM scripts: create, deploy, screenshot, input
 docs/           Design, plan, and the compatibility results
 .deps/          Local Qt toolchain (created by etc/bootstrap.ps1, not committed)
@@ -92,14 +92,23 @@ These are QML in Visor ([`src/bar/config`](src/bar/config): `Launcher.qml`, `Sys
 | Keys | Action |
 | --- | --- |
 | Win (pressed alone), Win+S, or click the bar's button | The launcher |
-| Win+X, or right-click the button | The power menu: lock, sign out, sleep, restart, shut down, quit to Explorer |
+| Win+X, or right-click the button | The system menu: the theme picker, then lock, sign out, sleep, restart, shut down, quit to Explorer |
 | Super+K | The key-binding cheat sheet |
 | Win+R | The Run dialog |
+| Super+Ctrl+Shift+Space | The next theme (see [Themes](#themes)) |
 
 - **Launcher:** lists what the Start menu would (`shell:AppsFolder`: Start Menu shortcuts and packaged apps), indexed in the background and refreshed when a Start Menu folder or a package changes. Type to search (fuzzy: `wt` finds Windows Terminal); Up/Down pick, Enter opens, Ctrl+Shift+Enter opens as administrator, Esc closes. With nothing typed, recently opened apps come first. If nothing matches, Enter runs what you typed as a command. Launches run on their own threads, so one that hangs blocks nothing.
 - **Packaged apps in replace mode:** without Explorer, Windows can't start packaged apps through the shell ("class not registered"). Those that run as ordinary processes (Terminal, Store Notepad, Paint) are started through their execution alias or executable instead, found in their manifest. UWP apps (Settings, Calculator, Clock) couldn't show a window anyway; they're listed dimmed as "Needs Explorer", after everything else. Under Explorer everything launches normally.
 - The bare Win press uses visor-wm's keyboard hook, so like the hooked keys below it doesn't work while an app running as administrator has focus; Win+S does. Win+Space is left alone: Windows uses it to switch keyboard layouts.
 - Pop-ups open on the monitor of the focused window, under the bar (the cheat sheet in the middle), and close when focus goes elsewhere.
+
+## Themes
+
+Windows owns the look, and Visor follows it, the way the taskbar and every app do: the bar's colours come from Windows' dark/light mode and accent colour, and change the moment they do, whether through Settings, a `.theme` file or Visor itself. A theme is Windows' own kind, a `.theme` file (wallpaper, dark/light mode, accent colour), and switching one does what picking it in Settings > Personalization does, so apps, window frames and the wallpaper follow. In replace mode Settings can't run, so Visor has the switcher: **Themes** in the Win+X menu, or Super+Ctrl+Shift+Space for the next one. Under Explorer the picker also offers Settings itself.
+
+The picker lists Windows' themes (`Windows (light)`, `Windows (dark)`, Flow, Glow, ...), the ones Settings saved for you (`%LOCALAPPDATA%\Microsoft\Windows\Themes`, where theme packs unpack too), and six that ship with Visor (`config/themes`): Tokyo Night, Catppuccin Mocha, Catppuccin Latte (light), Nord, Gruvbox and Everforest, all MIT palettes, each a `.theme` with a generated wallpaper (`etc/make-wallpapers.py`) and, Omarchy-style, a matching Windows Terminal scheme in `<name>.terminal.json` beside it. Windows has no convention for terminal palettes, so that part is the one addition: applying such a theme puts the scheme into Terminal's `settings.json` and makes it the default profiles' scheme (keeping the original once as `settings.json.before-visor`); Windows' own themes leave Terminal alone.
+
+Of a `.theme`, Visor applies the wallpaper and its fit, `SystemMode` / `AppMode` and `ColorizationColor` (the registry values Settings writes, followed by the `ImmersiveColorSet` broadcast everything listens for), and records it as Windows' current theme. Sounds, cursors and desktop icons are left alone. A shipped theme names its wallpaper relative to itself, which Windows can't read, so applying one first installs an absolute-path copy in your Windows theme folder; from then on Settings shows and can re-apply it like any other. Drop your own `.theme` (and optional `.terminal.json`) in `%LOCALAPPDATA%\Microsoft\Windows\Themes` to add one. The whole switch runs from Visor, so it works the same under Explorer. `visor-wm`'s focused-window border is `accent` by default and follows the accent colour too.
 
 ## Window manager
 
@@ -109,11 +118,11 @@ These are QML in Visor ([`src/bar/config`](src/bar/config): `Launcher.qml`, `Sys
 - **What tiles:** normal resizable app windows. Dialogs, fixed-size, always-on-top and fullscreen windows float, and so do windows of elevated apps (such as Task Manager), because Windows won't let a normal app move them.
 - **Maximise and minimise still work:** a maximised window keeps its tile and goes back into it when restored. A minimised window leaves the layout until it comes back.
 - **Dragging** a tiled window snaps it back into its tile, or into the layout of the monitor it was dropped on.
-- **Borders:** the focused window gets `col.active_border` and the rest `col.inactive_border` (Windows 11 draws them 1 px wide).
+- **Borders:** the focused window gets `col.active_border` and the rest `col.inactive_border` (Windows 11 draws them 1 px wide). A colour can be `accent`: Windows' accent colour, followed as it changes (the default for the focused window; see [Themes](#themes)).
 - **Windows that won't shrink:** some apps have a minimum size (Windows Terminal stops at about 465 px wide). When a window ends up bigger than its tile, `visor-wm` remembers that size and gives the window that much room, kept on-screen, so it covers part of its neighbour instead of running off the edge. Resizing stops there too.
 - **Multiple monitors:** each monitor has its own layout. New windows tile on the monitor they open on. Gaps are logical pixels, so they scale with each monitor's DPI, as in Hyprland. Focus and swapping cross monitors. Where there's no window to swap with, Super+Shift+arrows moves the window to the monitor in that direction, like Win+Shift+Left/Right in Windows (floating windows too). Windows on a monitor that's unplugged move to the primary one. *This part hasn't been tested with more than one monitor yet.*
 
-Config is `wm.conf`, a subset of `hyprland.conf`, and saving it applies it at once. It is looked up like Visor's config: `--config`, `%VISOR_WM_CONFIG%`, `~/.config/visor/wm.conf`, then [`src/bar/config/wm.conf`](src/bar/config/wm.conf) (debug builds), then `config/wm.conf` next to the exe. The default file documents every setting: gaps, border colours, the dwindle options and window rules such as `windowrule = float, exe:^notepad\.exe$`.
+Config is `wm.conf`, a subset of `hyprland.conf`, and saving it applies it at once. It is looked up like Visor's config: `--config`, `%VISOR_WM_CONFIG%`, `~/.config/visor/wm.conf`, then [`src/bar/config/wm.conf`](src/bar/config/wm.conf) (debug builds), then `config/wm.conf` next to the exe. The default file documents every setting: gaps, border colours, the dwindle options, `source = <file>` includes and window rules such as `windowrule = float, exe:^notepad\.exe$`.
 
 ### Keys
 
@@ -121,7 +130,8 @@ The default bindings follow Omarchy. They are all `bind` lines in `wm.conf`, in 
 
 | Keys | Action |
 | --- | --- |
-| Win, Super+S, Super+X, Super+K, Super+R | Launcher, power menu, cheat sheet, Run (see [Launcher and menus](#launcher-and-menus)) |
+| Win, Super+S, Super+X, Super+K, Super+R | Launcher, system menu, cheat sheet, Run (see [Launcher and menus](#launcher-and-menus)) |
+| Super+Ctrl+Shift+Space | Next theme (see [Themes](#themes)) |
 | Super+Return | Terminal (`wt.exe`) |
 | Super+E | File Explorer |
 | Super+W | Close the window |

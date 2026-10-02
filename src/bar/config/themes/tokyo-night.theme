@@ -1,0 +1,24 @@
+; Tokyo Night for Visor: a Windows theme (wallpaper, mode, accent) after Enkia's Tokyo Night (https://github.com/enkia/tokyo-night-vscode-theme, MIT).
+; The wallpaper path is relative to this file (Visor's addition; Windows wants an
+; absolute one, so Visor installs an absolute-path copy when applying it).
+; tokyo-night.terminal.json next to it is the matching Windows Terminal scheme.
+
+[Theme]
+DisplayName=Tokyo Night
+
+[Control Panel\Desktop]
+Wallpaper=tokyo-night.png
+TileWallpaper=0
+WallpaperStyle=10
+
+[VisualStyles]
+Path=%SystemRoot%\resources\themes\Aero\Aero.msstyles
+ColorStyle=NormalColor
+Size=NormalSize
+AutoColorization=0
+ColorizationColor=0XC47AA2F7
+SystemMode=Dark
+AppMode=Dark
+
+[MasterThemeSelector]
+MTSM=DABJDKT

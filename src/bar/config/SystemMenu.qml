@@ -1,19 +1,23 @@
 import QtQuick
 import Visor
 
-// The power menu, like the "Shut down or sign out" part of Windows' Win+X
+// The system menu, like the "Shut down or sign out" part of Windows' Win+X
 // menu: lock, sign out, sleep, restart, shut down, and, with visor-shell,
-// quitting to Explorer. Opens under the bar's launcher button (right-click
-// it) or with Win+X. Up/Down and Enter, or click; Esc closes.
+// quitting to Explorer; plus the Windows theme picker (Omarchy's menu has one
+// too; Windows keeps it in Settings). Opens under the bar's launcher button
+// (right-click it) or with Win+X. Up/Down and Enter, or click; Esc closes.
 PopupWindow {
     id: menu
 
     readonly property int rowHeight: 36
     property int current: 0
+    // Set by shell.qml: the picker the "Theme" row opens.
+    property PopupWindow themePicker
 
     // {glyph, text, action}; glyphs are Segoe Fluent Icons.
     readonly property var actions: {
         const list = [
+            { glyph: "", text: "Themes", action: () => { if (menu.themePicker) menu.themePicker.open() } },
             { glyph: "", text: "Lock", action: () => Shell.lock() },
             { glyph: "", text: "Sign out", action: () => Shell.signOut() },
             { glyph: "", text: "Sleep", action: () => Shell.sleep() },

@@ -134,6 +134,7 @@ WindowManager::WindowManager(Config config, QObject *parent)
     : QObject(parent)
     , m_config(std::move(config))
 {
+    m_accent = win::accentColor();
     g_instance = this;
     m_desktops.push_back(std::make_unique<Desktop>());
 
@@ -246,7 +247,7 @@ void WindowManager::setConfig(Config config)
         if (!win::exists(w))
             continue;
         if (m_config.borderSize > 0)
-            win::setBorderColor(w, w == m_active ? m_config.activeBorder : m_config.inactiveBorder);
+            win::setBorderColor(w, borderColor(w == m_active));
         else
             win::resetBorderColor(w);
     }
@@ -378,6 +379,13 @@ std::intptr_t WindowManager::handleMessage(void *window, unsigned msg, std::uint
         refreshMonitors();
         arrangeAll();
         settleSoon();
+    }
+    // Windows' accent changed (Settings, a theme, Visor): DWM's notice, and
+    // the broadcast every app reloads its colours on.
+    if (msg == WM_DWMCOLORIZATIONCOLORCHANGED
+        || (msg == WM_SETTINGCHANGE && lParam
+            && wcscmp(reinterpret_cast<const wchar_t *>(lParam), L"ImmersiveColorSet") == 0)) {
+        refreshAccent();
     }
     return DefWindowProcW(static_cast<HWND>(window), msg, WPARAM(wParam), LPARAM(lParam));
 }
@@ -670,8 +678,29 @@ void WindowManager::colorBorder(quintptr hwnd, bool active)
 {
     if (m_config.borderSize <= 0)
         return;
-    win::setBorderColor(hwnd, active ? m_config.activeBorder : m_config.inactiveBorder);
+    win::setBorderColor(hwnd, borderColor(active));
     m_colored.insert(hwnd);
+}
+
+quint32 WindowManager::borderColor(bool active) const
+{
+    const Config::BorderColor &c = active ? m_config.activeBorder : m_config.inactiveBorder;
+    return c.accent ? m_accent : c.rgb;
+}
+
+void WindowManager::refreshAccent()
+{
+    const quint32 accent = win::accentColor();
+    if (accent == m_accent)
+        return;
+    m_accent = accent;
+    if (m_config.borderSize <= 0 || (!m_config.activeBorder.accent && !m_config.inactiveBorder.accent))
+        return;
+    qInfo().noquote() << "accent colour is now" << QStringLiteral("#%1").arg(accent, 6, 16, QLatin1Char('0'));
+    for (quintptr w : std::as_const(m_colored)) {
+        if (win::exists(w))
+            win::setBorderColor(w, borderColor(w == m_active));
+    }
 }
 
 // ---- Desktops -------------------------------------------------------------

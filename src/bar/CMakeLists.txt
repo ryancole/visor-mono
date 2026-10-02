@@ -12,6 +12,7 @@ qt_add_executable(visor WIN32
     services/appindex.h services/appindex.cpp
     ../common/launch.h ../common/launch.cpp
     ../common/log.h ../common/log.cpp
+    ../common/theme.h ../common/theme.cpp
     resources/resource.h
     resources/visor.rc
 )
@@ -37,6 +38,7 @@ qt_add_qml_module(visor
         services/shellcontrol.h services/shellcontrol.cpp
         services/keybindings.h services/keybindings.cpp
         services/apps.h services/apps.cpp
+        services/themes.h services/themes.cpp
 )
 
 # services/ is listed too: the generated QML type registration includes
@@ -65,6 +67,7 @@ target_link_libraries(visor PRIVATE
     advapi32
     dwmapi
     powrprof
+    shlwapi
     windowsapp
 )
 
