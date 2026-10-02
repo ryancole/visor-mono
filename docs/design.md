@@ -167,7 +167,7 @@ Session work runs alongside Phases 2–3:
 - Logoff and shutdown (`WM_QUERYENDSESSION`), multi-monitor and DPI changes.
 - Explorer-as-file-manager polish.
 
-**Phase 3: window manager (`visor-wm`).** 3a (single-monitor dwindle tiling with gaps, float rules and borders) and 3b (Hyprland-style key bindings) are done. Next are 3c (workspaces and the `Workspaces` QML type) and 3d (multiple monitors, DPI and edge cases).
+**Phase 3: window manager (`visor-wm`).** 3a (single-monitor dwindle tiling with gaps, float rules and borders), 3b (Hyprland-style key bindings) and 3c (virtual desktops that follow Windows 11's conventions, and the `Workspaces` QML type) are done. Next is 3d (multiple monitors, DPI and edge cases).
 - Tiling layouts and workspaces 1–9.
 - A key-binding config.
 - A `Workspaces` QML type in Visor.

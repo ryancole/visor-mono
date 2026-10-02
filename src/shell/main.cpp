@@ -195,10 +195,21 @@ int main(int argc, char *argv[])
         });
     }
     QObject::connect(&link, &visor::VisorLink::messageReceived, &app, [&](const QJsonObject &m) {
-        if (tray && m.value(QStringLiteral("type")).toString() == QLatin1String("tray.click")) {
+        const QString type = m.value(QStringLiteral("type")).toString();
+        if (tray && type == QLatin1String("tray.click")) {
             tray->click(m.value(QStringLiteral("id")).toInt(), m.value(QStringLiteral("button")).toString(),
                         m.value(QStringLiteral("x")).toInt(), m.value(QStringLiteral("y")).toInt());
+        } else if (type == QLatin1String("workspace.activate")) {
+            link.sendToWm(m);
         }
+    });
+
+    // visor-wm's desktops, passed on to Visor; the latest is re-sent when
+    // Visor (re)connects.
+    QJsonObject desktops;
+    QObject::connect(&link, &visor::VisorLink::wmMessageReceived, &app, [&](const QJsonObject &m) {
+        desktops = m;
+        link.send(m);
     });
 
     QObject::connect(&link, &visor::VisorLink::clientConnected, &app, [&] {
@@ -214,6 +225,8 @@ int main(int argc, char *argv[])
                 icons.append(toJson(i));
             link.send({{QStringLiteral("type"), QStringLiteral("tray.reset")}, {QStringLiteral("icons"), icons}});
         }
+        if (!desktops.isEmpty())
+            link.send(desktops);
         if (mode == Mode::Replace)
             minimized.setHidden(true);
     });
@@ -241,6 +254,13 @@ int main(int argc, char *argv[])
         windowManager = std::make_unique<visor::Supervisor>(
             QStringLiteral("visor-wm.exe"),
             QStringList{QStringLiteral("--shell-pid"), QString::number(QCoreApplication::applicationPid())});
+        // Until a restarted visor-wm reports in, there are no desktops.
+        QObject::connect(windowManager.get(), &visor::Supervisor::exited, &app, [&] {
+            desktops = {};
+            link.send({{QStringLiteral("type"), QStringLiteral("workspaces")},
+                       {QStringLiteral("workspaces"), QJsonArray()},
+                       {QStringLiteral("active"), 0}});
+        });
         windowManager->start();
     }
 

@@ -50,6 +50,16 @@ void close(quintptr hwnd);
 // Brings the window to the top of the z-order without activating it.
 void raise(quintptr hwnd);
 
+bool isVisible(quintptr hwnd);
+quint32 processId(quintptr hwnd);
+quintptr owner(quintptr hwnd);     // 0 if unowned
+quintptr rootOwner(quintptr hwnd); // the end of the owner chain (itself if unowned)
+// The desktop window (visor-shell's, or Explorer's).
+quintptr shellWindow();
+// Hides / shows (in its current state, without activating) asynchronously.
+void hide(quintptr hwnd);
+void show(quintptr hwnd);
+
 // Moves and sizes the window so its *visible* frame fills `rect`. Windows 10+
 // windows have invisible resize borders around the visible frame; those are
 // added back so tiles line up exactly. Asynchronous: a hung app can't block

@@ -29,6 +29,7 @@ qt_add_qml_module(visor
         services/media.h services/media.cpp
         services/tasks.h services/tasks.cpp
         services/systemtray.h services/systemtray.cpp
+        services/workspaces.h services/workspaces.cpp
 )
 
 # services/ is listed too: the generated QML type registration includes

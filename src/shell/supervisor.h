@@ -24,6 +24,10 @@ public:
 
     void start();
 
+signals:
+    // The program exited (crashed or quit); it may be restarted.
+    void exited();
+
 private:
     void launch();
     void onExited();

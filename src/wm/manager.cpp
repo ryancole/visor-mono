@@ -1,9 +1,16 @@
 #include "wm/manager.h"
 
 #include "common/launch.h"
+#include "common/linkprotocol.h"
+#include "common/log.h"
 #include "wm/windows.h"
 
+#include <QCoreApplication>
 #include <QDebug>
+#include <QDir>
+#include <QFile>
+#include <QJsonArray>
+#include <QJsonDocument>
 
 #include <windows.h>
 
@@ -18,6 +25,8 @@ namespace {
 
 constexpr int kSettleMs = 300;
 constexpr int kRecolorMs = 150;
+constexpr int kFocusAfterSwitchMs = 50; // let the shown windows appear first
+constexpr UINT kSendTimeoutMs = 500;
 constexpr UINT kHookKeyMessage = WM_APP + 1; // from KeyHook; wParam = binding id
 
 WindowManager *g_instance = nullptr;
@@ -47,10 +56,10 @@ const wchar_t *windowClass()
         wc.cbSize = sizeof(wc);
         wc.lpfnWndProc = windowProc;
         wc.hInstance = GetModuleHandleW(nullptr);
-        wc.lpszClassName = L"VisorWm";
+        wc.lpszClassName = link::kWmClass;
         return RegisterClassExW(&wc);
     }();
-    return atom ? L"VisorWm" : nullptr;
+    return atom ? link::kWmClass : nullptr;
 }
 
 Rect toRect(const RECT &r)
@@ -68,6 +77,13 @@ QString deviceName(HMONITOR monitor, MONITORINFOEXW *info = nullptr)
     return QString::fromWCharArray(mi.szDevice);
 }
 
+// Windows we hid on other desktops, so a later visor-wm can show them again
+// if this one dies without doing so: "hwnd pid" per line.
+QString hiddenFile()
+{
+    return QDir(dataDir()).filePath(QStringLiteral("wm-hidden.txt"));
+}
+
 } // namespace
 
 WindowManager::WindowManager(Config config, QObject *parent)
@@ -75,6 +91,8 @@ WindowManager::WindowManager(Config config, QObject *parent)
     , m_config(std::move(config))
 {
     g_instance = this;
+    m_desktops.push_back(std::make_unique<Desktop>());
+
     m_settleTimer.setSingleShot(true);
     m_settleTimer.setInterval(kSettleMs);
     connect(&m_settleTimer, &QTimer::timeout, this, &WindowManager::arrangeAll);
@@ -87,9 +105,13 @@ WindowManager::WindowManager(Config config, QObject *parent)
         if (m_active && m_colored.contains(m_active) && win::exists(m_active))
             colorBorder(m_active, true);
     });
+    m_stateTimer.setSingleShot(true);
+    m_stateTimer.setInterval(0);
+    connect(&m_stateTimer, &QTimer::timeout, this, &WindowManager::sendState);
 
     // Top-level (hidden): WM_DISPLAYCHANGE and WM_SETTINGCHANGE are only
-    // broadcast to top-level windows, not message-only ones.
+    // broadcast to top-level windows, not message-only ones, and the shell
+    // finds it by class.
     const HWND hwnd = CreateWindowExW(WS_EX_TOOLWINDOW, windowClass(), L"visor-wm", WS_POPUP, 0, 0, 0, 0, nullptr,
                                       nullptr, GetModuleHandleW(nullptr), this);
     if (!hwnd)
@@ -117,6 +139,10 @@ WindowManager::WindowManager(Config config, QObject *parent)
             qWarning() << "SetWinEventHook failed for event" << Qt::hex << from << "error" << GetLastError();
     }
 
+    // Windows a previous visor-wm left hidden come back (and get adopted as
+    // their show events arrive).
+    restoreHidden();
+
     // Adopt what is already open, bottom of the z-order first so the
     // longest-standing windows get the biggest tiles.
     QList<quintptr> existing;
@@ -129,9 +155,10 @@ WindowManager::WindowManager(Config config, QObject *parent)
     std::reverse(existing.begin(), existing.end());
     for (quintptr w : std::as_const(existing))
         consider(w);
-    focusChanged(reinterpret_cast<quintptr>(GetForegroundWindow()));
+    focusChanged(win::foreground());
     qInfo() << "tiling" << m_managed.size() << "windows on" << m_monitors.size() << "monitors";
     registerBindings();
+    sendState();
 }
 
 WindowManager::~WindowManager()
@@ -140,6 +167,12 @@ WindowManager::~WindowManager()
     unregisterBindings();
     for (void *hook : std::as_const(m_hooks))
         UnhookWinEvent(static_cast<HWINEVENTHOOK>(hook));
+    // Nothing may stay hidden once we're gone.
+    for (auto it = m_hidden.cbegin(); it != m_hidden.cend(); ++it) {
+        if (win::exists(it.key()))
+            win::show(it.key());
+    }
+    QFile::remove(hiddenFile());
     for (quintptr w : std::as_const(m_colored)) {
         if (win::exists(w))
             win::resetBorderColor(w);
@@ -170,6 +203,20 @@ void WindowManager::handleEvent(unsigned event, quintptr hwnd)
 {
     switch (event) {
     case EVENT_OBJECT_SHOW:
+        if (m_expectShow.remove(hwnd))
+            break; // we showed it (desktop switch)
+        if (Desktop *desktop = m_hidden.take(hwnd)) {
+            // The app showed a window we hid on another desktop (e.g. from
+            // its tray icon). Windows switches to a window's desktop when it
+            // is activated; do the same.
+            qInfo().noquote() << "hidden window shown by its app:" << win::exeName(hwnd) << win::className(hwnd)
+                              << QLatin1Char('"') + win::title(hwnd) + QLatin1Char('"');
+            saveHidden();
+            activateDesktop(indexOf(desktop));
+            break;
+        }
+        consider(hwnd);
+        break;
     case EVENT_OBJECT_UNCLOAKED:
     case EVENT_SYSTEM_MINIMIZEEND:
         consider(hwnd);
@@ -178,13 +225,27 @@ void WindowManager::handleEvent(unsigned event, quintptr hwnd)
         m_colored.remove(hwnd);
         m_tileOverride.remove(hwnd);
         m_floatFullscreen.remove(hwnd);
+        m_expectHide.remove(hwnd);
+        m_expectShow.remove(hwnd);
+        if (m_hidden.remove(hwnd))
+            saveHidden();
         if (hwnd == m_active)
             m_active = 0;
         if (hwnd == m_previousActive)
             m_previousActive = 0;
         m_focusedAt.remove(hwnd);
-        Q_FALLTHROUGH();
+        if (m_managed.contains(hwnd))
+            unmanage(hwnd);
+        untrack(hwnd);
+        break;
     case EVENT_OBJECT_HIDE:
+        if (m_expectHide.remove(hwnd) || m_hidden.contains(hwnd))
+            break; // we hid it (desktop switch): it stays on its desktop
+        // The app hid it (closed to the tray, say): forget it until it's back.
+        if (m_managed.contains(hwnd))
+            unmanage(hwnd);
+        untrack(hwnd);
+        break;
     case EVENT_OBJECT_CLOAKED:
     case EVENT_SYSTEM_MINIMIZESTART:
         if (m_managed.contains(hwnd))
@@ -214,7 +275,7 @@ void WindowManager::handleEvent(unsigned event, quintptr hwnd)
         const bool held = win::isMaximized(hwnd) || win::isFullscreen(hwnd);
         if (held != it->held) {
             it->held = held;
-            if (!held)
+            if (!held && it->desktop == current())
                 arrange(it->monitor); // back from maximised/fullscreen: into its tile
         }
         break;
@@ -231,6 +292,20 @@ std::intptr_t WindowManager::handleMessage(void *window, unsigned msg, std::uint
         if (index >= 0 && index < m_registeredBindings && index < m_config.bindings.size())
             dispatch(m_config.bindings[index]);
         return 0;
+    }
+    if (msg == WM_COPYDATA) {
+        // A request from Visor, forwarded by visor-shell (linkprotocol.h).
+        const auto *cds = reinterpret_cast<const COPYDATASTRUCT *>(lParam);
+        if (!cds || cds->dwData != link::kLinkMagic)
+            return FALSE;
+        const QJsonObject m =
+            QJsonDocument::fromJson(QByteArray(static_cast<const char *>(cds->lpData), int(cds->cbData))).object();
+        if (m.value(QStringLiteral("type")).toString() == QLatin1String("workspace.activate")) {
+            const int index = m.value(QStringLiteral("index")).toInt();
+            // From the event loop, not inside the shell's SendMessage.
+            QMetaObject::invokeMethod(this, [this, index] { activateDesktop(index); }, Qt::QueuedConnection);
+        }
+        return TRUE;
     }
     if (msg == WM_DISPLAYCHANGE || (msg == WM_SETTINGCHANGE && wParam == SPI_SETWORKAREA)) {
         refreshMonitors();
@@ -259,22 +334,26 @@ void WindowManager::refreshMonitors()
         return; // mid display change; keep what we had
     m_monitors = monitors;
 
-    // Windows on a monitor that went away move to the primary one.
+    // Windows on a monitor that went away move to the primary one, on
+    // whichever desktop they're on.
     const QString primary = primaryMonitor();
-    for (auto it = m_workspaces.begin(); it != m_workspaces.end();) {
-        if (m_monitors.contains(it->first)) {
-            ++it;
-            continue;
+    const Rect area = m_monitors.value(primary).work;
+    for (const auto &desktop : m_desktops) {
+        auto &spaces = desktop->monitors;
+        for (auto it = spaces.begin(); it != spaces.end();) {
+            if (m_monitors.contains(it->first)) {
+                ++it;
+                continue;
+            }
+            const QList<quintptr> orphans = it->second.layout.windows();
+            it = spaces.erase(it);
+            Workspace &target = spaces[primary];
+            for (quintptr w : orphans) {
+                target.layout.insert(w, 0, area, m_config.dwindle);
+                m_managed[w].monitor = primary;
+            }
+            qInfo() << "monitor removed; moved" << orphans.size() << "windows to" << primary;
         }
-        const QList<quintptr> orphans = it->second.layout.windows();
-        it = m_workspaces.erase(it);
-        Workspace &target = workspace(primary);
-        const Rect area = m_monitors.value(primary).work;
-        for (quintptr w : orphans) {
-            target.layout.insert(w, 0, area, m_config.dwindle);
-            m_managed[w].monitor = primary;
-        }
-        qInfo() << "monitor removed; moved" << orphans.size() << "windows to" << primary;
     }
 }
 
@@ -293,9 +372,13 @@ QString WindowManager::primaryMonitor() const
     return m_monitors.isEmpty() ? QString() : m_monitors.cbegin().key();
 }
 
-WindowManager::Workspace &WindowManager::workspace(const QString &monitor)
+int WindowManager::indexOf(const Desktop *desktop) const
 {
-    return m_workspaces[monitor];
+    for (size_t i = 0; i < m_desktops.size(); ++i) {
+        if (m_desktops[i].get() == desktop)
+            return int(i);
+    }
+    return -1;
 }
 
 void WindowManager::consider(quintptr hwnd)
@@ -306,6 +389,7 @@ void WindowManager::consider(quintptr hwnd)
     if (kind != win::Kind::Ignore) {
         if (const auto it = m_tileOverride.constFind(hwnd); it != m_tileOverride.cend())
             kind = *it ? win::Kind::Tile : win::Kind::Float;
+        track(hwnd);
     }
     const bool managed = m_managed.contains(hwnd);
     if (!managed && kind == win::Kind::Tile)
@@ -316,10 +400,29 @@ void WindowManager::consider(quintptr hwnd)
         unmanage(hwnd);
 }
 
+void WindowManager::track(quintptr hwnd)
+{
+    if (m_desktopOf.contains(hwnd))
+        return;
+    // A dialog belongs to its owner's desktop; anything else opens on the
+    // current one, as in Windows.
+    Desktop *desktop = m_desktopOf.value(win::rootOwner(hwnd), current());
+    m_desktopOf.insert(hwnd, desktop);
+    if (!win::owner(hwnd))
+        m_stateTimer.start(); // window counts changed
+}
+
+void WindowManager::untrack(quintptr hwnd)
+{
+    if (m_desktopOf.remove(hwnd))
+        m_stateTimer.start();
+}
+
 void WindowManager::manage(quintptr hwnd)
 {
+    Desktop *desktop = m_desktopOf.value(hwnd, current());
     const QString monitor = monitorOf(hwnd);
-    Workspace &ws = workspace(monitor);
+    Workspace &ws = desktop->monitors[monitor];
     // Hyprland splits the focused window; that's still the previous one when
     // the new window's show event arrives.
     const quintptr target = ws.layout.contains(ws.lastFocused) ? ws.lastFocused : 0;
@@ -329,35 +432,39 @@ void WindowManager::manage(quintptr hwnd)
     if (win::isMaximized(hwnd))
         win::unmaximize(hwnd);
     ws.layout.insert(hwnd, target, m_monitors.value(monitor).work, m_config.dwindle, cursor.x, cursor.y);
-    m_managed.insert(hwnd, {monitor, false});
+    m_managed.insert(hwnd, {desktop, monitor, false, false});
     colorBorder(hwnd, hwnd == m_active);
-    qInfo().noquote() << "tile" << win::exeName(hwnd) << win::className(hwnd) << QLatin1Char('"') + win::title(hwnd) + QLatin1Char('"')
-                      << "on" << monitor;
-    arrange(monitor);
-    settleSoon();
+    qInfo().noquote() << "tile" << win::exeName(hwnd) << win::className(hwnd)
+                      << QLatin1Char('"') + win::title(hwnd) + QLatin1Char('"') << "on" << monitor << "desktop"
+                      << indexOf(desktop) + 1;
+    if (desktop == current()) {
+        arrange(monitor);
+        settleSoon();
+    }
 }
 
 void WindowManager::unmanage(quintptr hwnd)
 {
-    const QString monitor = m_managed.take(hwnd).monitor;
+    const Managed m = m_managed.take(hwnd);
     m_tiles.remove(hwnd);
-    Workspace &ws = workspace(monitor);
+    Workspace &ws = workspaceOf(m);
     ws.layout.remove(hwnd);
     if (ws.lastFocused == hwnd)
         ws.lastFocused = 0;
-    arrange(monitor);
+    if (m.desktop == current())
+        arrange(m.monitor);
 }
 
 void WindowManager::moveToMonitor(quintptr hwnd, const QString &monitor)
 {
     Managed &m = m_managed[hwnd];
     const QString from = m.monitor;
-    Workspace &old = workspace(from);
+    Workspace &old = workspaceOf(m);
     old.layout.remove(hwnd);
     if (old.lastFocused == hwnd)
         old.lastFocused = 0;
 
-    Workspace &ws = workspace(monitor);
+    Workspace &ws = m.desktop->monitors[monitor];
     const quintptr target = ws.layout.contains(ws.lastFocused) ? ws.lastFocused : 0;
     POINT cursor{};
     GetCursorPos(&cursor);
@@ -410,8 +517,10 @@ void WindowManager::focusChanged(quintptr hwnd)
         return;
     if (win::classify(hwnd, m_config) != win::Kind::Ignore)
         colorBorder(hwnd, true);
+    if (Desktop *desktop = m_desktopOf.value(hwnd))
+        desktop->lastFocused = hwnd;
     if (const auto it = m_managed.constFind(hwnd); it != m_managed.cend())
-        workspace(it->monitor).lastFocused = hwnd;
+        workspaceOf(*it).lastFocused = hwnd;
 }
 
 void WindowManager::colorBorder(quintptr hwnd, bool active)
@@ -421,6 +530,299 @@ void WindowManager::colorBorder(quintptr hwnd, bool active)
     win::setBorderColor(hwnd, active ? m_config.activeBorder : m_config.inactiveBorder);
     m_colored.insert(hwnd);
 }
+
+// ---- Desktops -------------------------------------------------------------
+
+void WindowManager::activateDesktop(int index)
+{
+    if (index < 0 || index >= int(m_desktops.size()) || index == m_current)
+        return;
+    Desktop *from = current();
+    Desktop *to = m_desktops[size_t(index)].get();
+
+    QSet<quintptr> leaving;
+    for (auto it = m_desktopOf.cbegin(); it != m_desktopOf.cend(); ++it) {
+        if (it.value() == from && win::isVisible(it.key()))
+            leaving.insert(it.key());
+    }
+    hideWindows(leaving, from);
+    m_current = index;
+    showWindows(to);
+
+    m_tiles.clear(); // the other desktop's tiles
+    arrangeAll();
+    settleSoon();
+    focusDesktop(to);
+    m_stateTimer.start();
+    qInfo() << "desktop" << index + 1 << "of" << m_desktops.size();
+}
+
+void WindowManager::newDesktop()
+{
+    // Like Win+Ctrl+D: add one at the end and go there.
+    m_desktops.push_back(std::make_unique<Desktop>());
+    activateDesktop(int(m_desktops.size()) - 1);
+}
+
+void WindowManager::closeDesktop()
+{
+    // Like Win+Ctrl+F4: the windows move to the desktop on the left (on the
+    // right when closing the first) and that desktop is shown.
+    if (m_desktops.size() < 2)
+        return;
+    Desktop *closing = current();
+    const int destIndex = m_current > 0 ? m_current - 1 : 1;
+    Desktop *dest = m_desktops[size_t(destIndex)].get();
+
+    for (auto it = m_managed.begin(); it != m_managed.end(); ++it) {
+        if (it->desktop != closing)
+            continue;
+        Workspace &ws = dest->monitors[it->monitor];
+        const quintptr target = ws.layout.contains(ws.lastFocused) ? ws.lastFocused : 0;
+        ws.layout.insert(it.key(), target, m_monitors.value(it->monitor).work, m_config.dwindle);
+        it->desktop = dest;
+    }
+    for (auto it = m_desktopOf.begin(); it != m_desktopOf.end(); ++it) {
+        if (it.value() == closing)
+            it.value() = dest;
+    }
+    for (auto it = m_hidden.begin(); it != m_hidden.end(); ++it) {
+        if (it.value() == closing)
+            it.value() = dest;
+    }
+    if (!dest->lastFocused)
+        dest->lastFocused = closing->lastFocused;
+
+    m_desktops.erase(m_desktops.begin() + m_current);
+    m_current = indexOf(dest);
+    showWindows(dest); // closing's windows are on screen already
+    m_tiles.clear();
+    arrangeAll();
+    settleSoon();
+    focusDesktop(dest);
+    m_stateTimer.start();
+    qInfo() << "closed a desktop; now on desktop" << m_current + 1 << "of" << m_desktops.size();
+}
+
+void WindowManager::moveToDesktop(quintptr hwnd, int index, bool follow)
+{
+    if (index < 0 || index >= int(m_desktops.size()) || index == m_current || !m_desktopOf.contains(hwnd))
+        return;
+    // A dialog moves with its owner.
+    hwnd = win::rootOwner(hwnd);
+    if (!m_desktopOf.contains(hwnd))
+        return;
+    Desktop *dest = m_desktops[size_t(index)].get();
+
+    if (const auto it = m_managed.find(hwnd); it != m_managed.end()) {
+        Workspace &old = workspaceOf(*it);
+        old.layout.remove(hwnd);
+        if (old.lastFocused == hwnd)
+            old.lastFocused = 0;
+        Workspace &ws = dest->monitors[it->monitor];
+        const quintptr target = ws.layout.contains(ws.lastFocused) ? ws.lastFocused : 0;
+        ws.layout.insert(hwnd, target, m_monitors.value(it->monitor).work, m_config.dwindle);
+        it->desktop = dest;
+        m_tiles.remove(hwnd);
+    }
+    for (auto it = m_desktopOf.begin(); it != m_desktopOf.end(); ++it) {
+        if (it.key() == hwnd || win::rootOwner(it.key()) == hwnd)
+            it.value() = dest; // with its dialogs
+    }
+    if (current()->lastFocused == hwnd)
+        current()->lastFocused = 0;
+    dest->lastFocused = hwnd;
+
+    if (follow) {
+        activateDesktop(index); // hides the rest, shows hwnd's new desktop
+        return;
+    }
+    hideWindows({hwnd}, dest);
+    arrangeAll();
+    focusDesktop(current());
+    m_stateTimer.start();
+}
+
+int WindowManager::desktopIndex(const QString &argument) const
+{
+    const QString arg = argument.trimmed().toLower();
+    // No wrapping at the ends, as in Windows.
+    if (arg == QLatin1String("e+1") || arg == QLatin1String("+1"))
+        return m_current + 1 < int(m_desktops.size()) ? m_current + 1 : -1;
+    if (arg == QLatin1String("e-1") || arg == QLatin1String("-1"))
+        return m_current - 1;
+    bool ok = false;
+    const int n = arg.toInt(&ok);
+    return ok && n >= 1 && n <= int(m_desktops.size()) ? n - 1 : -1;
+}
+
+void WindowManager::hideWindows(const QSet<quintptr> &roots, Desktop *desktop)
+{
+    if (roots.isEmpty())
+        return;
+    // Take focus off them first. Hiding the focused window makes Windows
+    // activate the next one, which may be another we're hiding, and some
+    // apps (Windows Terminal) show their window again when it's activated.
+    const quintptr focused = win::foreground();
+    if (focused && (roots.contains(focused) || roots.contains(win::rootOwner(focused)))) {
+        if (const quintptr desk = win::shellWindow())
+            win::focus(desk);
+    }
+    // Their dialogs and other owned windows go too (hiding an owner doesn't
+    // hide what it owns), but only ones with a size: 0x0 owned windows are
+    // plumbing, and hiding some breaks their app. A console's
+    // PseudoConsoleWindow, for one, passes visibility on to Windows Terminal,
+    // which then hides and re-shows its own window.
+    QSet<quintptr> windows = roots;
+    struct Search
+    {
+        const QSet<quintptr> *roots;
+        QSet<quintptr> *found;
+    } search{&roots, &windows};
+    EnumWindows(
+        [](HWND w, LPARAM param) -> BOOL {
+            auto *s = reinterpret_cast<Search *>(param);
+            const auto window = reinterpret_cast<quintptr>(w);
+            if (win::isVisible(window) && s->roots->contains(win::rootOwner(window))) {
+                const Rect r = win::frameRect(window);
+                if (r.width() > 0 && r.height() > 0)
+                    s->found->insert(window);
+            }
+            return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&search));
+
+    for (quintptr w : std::as_const(windows)) {
+        m_hidden.insert(w, desktop);
+        m_expectHide.insert(w);
+        m_expectShow.remove(w);
+        win::hide(w);
+    }
+    saveHidden();
+}
+
+void WindowManager::showWindows(Desktop *desktop)
+{
+    for (auto it = m_hidden.begin(); it != m_hidden.end();) {
+        if (it.value() != desktop) {
+            ++it;
+            continue;
+        }
+        const quintptr w = it.key();
+        it = m_hidden.erase(it);
+        if (!win::exists(w))
+            continue;
+        m_expectShow.insert(w);
+        m_expectHide.remove(w);
+        win::show(w);
+    }
+    saveHidden();
+}
+
+void WindowManager::focusDesktop(Desktop *desktop)
+{
+    // Its last focused window, or else the desktop itself, so keyboard focus
+    // doesn't stay on a window that is now hidden. After a moment: the shown
+    // windows are shown asynchronously.
+    QTimer::singleShot(kFocusAfterSwitchMs, this, [this, desktop] {
+        if (indexOf(desktop) < 0)
+            return;
+        quintptr target = desktop->lastFocused;
+        if (!target || m_desktopOf.value(target) != desktop || !win::isVisible(target)) {
+            target = 0;
+            for (auto it = m_desktopOf.cbegin(); it != m_desktopOf.cend(); ++it) {
+                if (it.value() == desktop && win::isVisible(it.key()) && !win::isMinimized(it.key())
+                    && !win::owner(it.key())) {
+                    target = it.key();
+                    break;
+                }
+            }
+        }
+        if (!target)
+            target = win::shellWindow();
+        if (target)
+            win::focus(target);
+    });
+}
+
+void WindowManager::saveHidden() const
+{
+    if (m_hidden.isEmpty()) {
+        QFile::remove(hiddenFile());
+        return;
+    }
+    QFile file(hiddenFile());
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
+        qWarning() << "cannot write" << file.fileName() << file.errorString();
+        return;
+    }
+    for (auto it = m_hidden.cbegin(); it != m_hidden.cend(); ++it)
+        file.write(QByteArray::number(qulonglong(it.key())) + ' ' + QByteArray::number(win::processId(it.key())) + '\n');
+}
+
+void WindowManager::restoreHidden()
+{
+    QFile file(hiddenFile());
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
+        return;
+    int restored = 0;
+    while (!file.atEnd()) {
+        const QList<QByteArray> fields = file.readLine().trimmed().split(' ');
+        if (fields.size() != 2)
+            continue;
+        const auto hwnd = quintptr(fields[0].toULongLong());
+        const auto pid = quint32(fields[1].toULong());
+        // The same window (not a reused handle) and still hidden.
+        if (win::exists(hwnd) && win::processId(hwnd) == pid && !win::isVisible(hwnd)) {
+            win::show(hwnd);
+            ++restored;
+        }
+    }
+    file.close();
+    file.remove();
+    if (restored)
+        qInfo() << "showed" << restored << "windows a previous visor-wm left hidden";
+}
+
+QJsonObject WindowManager::desktopState() const
+{
+    QJsonArray desktops;
+    for (size_t i = 0; i < m_desktops.size(); ++i) {
+        int windows = 0;
+        for (auto it = m_desktopOf.cbegin(); it != m_desktopOf.cend(); ++it) {
+            if (it.value() == m_desktops[i].get() && !win::owner(it.key()))
+                ++windows;
+        }
+        desktops.append(QJsonObject{
+            {QStringLiteral("name"), QStringLiteral("Desktop %1").arg(i + 1)},
+            {QStringLiteral("windows"), windows},
+        });
+    }
+    return {
+        {QStringLiteral("type"), QStringLiteral("workspaces")},
+        {QStringLiteral("workspaces"), desktops},
+        {QStringLiteral("active"), m_current},
+        {QStringLiteral("pid"), qint64(QCoreApplication::applicationPid())},
+    };
+}
+
+void WindowManager::sendState()
+{
+    // To visor-shell, which passes it on to Visor (linkprotocol.h).
+    const HWND shell = FindWindowW(link::kShellLinkClass, nullptr);
+    if (!shell)
+        return;
+    const QByteArray payload = QJsonDocument(desktopState()).toJson(QJsonDocument::Compact);
+    COPYDATASTRUCT cds{};
+    cds.dwData = link::kLinkMagic;
+    cds.cbData = DWORD(payload.size());
+    cds.lpData = const_cast<char *>(payload.constData());
+    DWORD_PTR result = 0;
+    SendMessageTimeoutW(shell, WM_COPYDATA, WPARAM(m_hwnd), LPARAM(&cds), SMTO_ABORTIFHUNG | SMTO_BLOCK,
+                        kSendTimeoutMs, &result);
+}
+
+// ---- Key bindings -----------------------------------------------------------
 
 void WindowManager::registerBindings()
 {
@@ -484,6 +886,23 @@ void WindowManager::dispatch(const Binding &binding)
     } else if (d == QLatin1String("resizeactive")) {
         const QStringList xy = arg.split(QLatin1Char(' '), Qt::SkipEmptyParts);
         resizeActive(xy.value(0).toInt(), xy.value(1).toInt());
+    } else if (d == QLatin1String("workspace")) {
+        if (arg == QLatin1String("new"))
+            newDesktop();
+        else
+            activateDesktop(desktopIndex(arg));
+    } else if (d == QLatin1String("movetoworkspace") || d == QLatin1String("movetoworkspacesilent")) {
+        const quintptr hwnd = win::foreground();
+        if (!m_desktopOf.contains(hwnd))
+            return;
+        int index = desktopIndex(arg);
+        if (arg == QLatin1String("new")) {
+            m_desktops.push_back(std::make_unique<Desktop>());
+            index = int(m_desktops.size()) - 1;
+        }
+        moveToDesktop(hwnd, index, d == QLatin1String("movetoworkspace"));
+    } else if (d == QLatin1String("closeworkspace")) {
+        closeDesktop();
     }
 }
 
@@ -603,7 +1022,7 @@ void WindowManager::toggleSplit()
 {
     const quintptr hwnd = win::foreground();
     if (const auto it = m_managed.constFind(hwnd); it != m_managed.cend()) {
-        workspace(it->monitor).layout.toggleSplit(hwnd);
+        workspaceOf(*it).layout.toggleSplit(hwnd);
         arrange(it->monitor);
     }
 }
@@ -612,7 +1031,7 @@ void WindowManager::resizeActive(int dx, int dy)
 {
     const quintptr hwnd = win::foreground();
     if (const auto it = m_managed.constFind(hwnd); it != m_managed.cend()) {
-        if (workspace(it->monitor).layout.resize(hwnd, dx, dy))
+        if (workspaceOf(*it).layout.resize(hwnd, dx, dy))
             arrange(it->monitor);
     }
 }
@@ -631,7 +1050,8 @@ quintptr WindowManager::neighbor(const Rect &from, Direction direction, quintptr
     std::tuple<int, qint64, int> bestScore;
     for (auto it = m_tiles.cbegin(); it != m_tiles.cend(); ++it) {
         const quintptr w = it.key();
-        if (w == exclude || !m_managed.contains(w) || win::isMinimized(w))
+        const auto managed = m_managed.constFind(w);
+        if (w == exclude || managed == m_managed.cend() || managed->desktop != current() || win::isMinimized(w))
             continue;
         const Rect &r = it.value();
         int edge = 0;

@@ -28,6 +28,18 @@
 //   {"type":"tray.changed","icon":TrayIcon}
 //   {"type":"tray.removed","id":n}
 //   {"type":"quit"}                             (handing the session to Explorer)
+//
+// Desktops (virtual desktops, run by visor-wm). visor-wm sends its state to
+// the shell's link window; the shell forwards it to Visor, re-sends the last
+// one when Visor (re)connects, and sends an empty list when visor-wm exits.
+// Visor's requests go the other way, to visor-wm's window (class kWmClass).
+//   visor-wm -> shell -> Visor:
+//     {"type":"workspaces","workspaces":[Desktop...],"active":index,"pid":n}
+//   Visor -> shell -> visor-wm:
+//     {"type":"workspace.activate","index":n}
+// Desktop = {"name":"Desktop 1","windows":n}; pid is visor-wm's, so Visor
+// can let it take the foreground when the user clicks a desktop.
+//
 // Task = {"hwnd":n,"title":"...","pid":n,"path":"...","flashing":bool}
 // TrayIcon = {"id":n,"pid":n,"tip":"...","icon":hicon,"hidden":bool}
 //   icon is an HICON owned by visor-shell (icons are session-wide USER
@@ -38,5 +50,6 @@ namespace visor::link {
 constexpr unsigned long kLinkMagic = 0x56534C31; // 'VSL1'
 constexpr wchar_t kShellLinkClass[] = L"VisorShellLink";
 constexpr wchar_t kShellCreatedMessage[] = L"VisorShellCreated";
+constexpr wchar_t kWmClass[] = L"VisorWm"; // visor-wm's (hidden) window
 
 } // namespace visor::link

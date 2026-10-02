@@ -180,9 +180,13 @@ void ShellLink::disconnect()
     m_tasks.clear();
     m_active = 0;
     m_trayIcons.clear();
+    m_workspaces.clear();
+    m_activeWorkspace = 0;
+    m_wmPid = 0;
     emit tasksReset();
     emit activeTaskChanged();
     emit trayReset();
+    emit workspacesChanged();
     emit connectedChanged();
 }
 
@@ -268,6 +272,15 @@ void ShellLink::onMessage(const QByteArray &json)
                 break;
             }
         }
+    } else if (type == "workspaces") {
+        m_workspaces.clear();
+        for (const QJsonValue &v : m.value("workspaces").toArray()) {
+            const QJsonObject o = v.toObject();
+            m_workspaces.append({o.value("name").toString(), o.value("windows").toInt()});
+        }
+        m_activeWorkspace = m.value("active").toInt();
+        m_wmPid = quint32(m.value("pid").toInteger());
+        emit workspacesChanged();
     } else if (type == "quit") {
         emit quitRequested();
     }

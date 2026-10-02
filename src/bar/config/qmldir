@@ -4,3 +4,4 @@ Label 1.0 Label.qml
 Icon 1.0 Icon.qml
 TaskList 1.0 TaskList.qml
 TrayArea 1.0 TrayArea.qml
+Desktops 1.0 Desktops.qml

@@ -37,6 +37,11 @@ struct WindowRule
 //   fullscreen [0|1]       (0: whole monitor, over the bar; 1: maximise)
 //   movefocus l|r|u|d      swapwindow l|r|u|d  togglesplit
 //   resizeactive <dx> <dy> (pixels; grows/shrinks the window's split)
+// Desktops (Windows 11's virtual desktops; Hyprland calls them workspaces):
+//   workspace new|e+1|e-1|N            create / next / previous / Nth
+//   movetoworkspace e+1|e-1|N|new      move the window there and follow it
+//   movetoworkspacesilent ...          move the window, stay here
+//   closeworkspace                     its windows go to the desktop on the left
 struct Binding
 {
     quint32 modifiers = 0; // MOD_ALT | MOD_CONTROL | MOD_SHIFT | MOD_WIN

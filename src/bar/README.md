@@ -54,6 +54,7 @@ config can put them in the bar itself.
 | `Audio` | singleton | Default output device: `volume` (0–1, writable), `muted` (writable), `deviceName`, `toggleMute()`. |
 | `Media` | singleton | Current media session: `title`, `artist`, `album`, `appId`, `playing`, `playPause()`, `next()`, `previous()`. |
 | `SystemTray` | singleton model | Notification-area icons, hosted by [visor-shell](../shell) (empty without it). Roles: `iconId`, `tooltip`, `icon`, `processId`. `click(iconId, button)` with `"left"`, `"right"`, `"middle"` or `"double"` forwards the click to the app. |
+| `Workspaces` | singleton model | Virtual desktops, from [visor-wm](../wm) (empty without it; `available` says which). Roles: `name` ("Desktop 1"), `active`, `windows`. Properties `count`, `active` (index). `activate(index)`, `next()`, `previous()`. The default config's `Desktops.qml` shows them once there are two or more. |
 | `Tasks` | singleton model | Open app windows, from [visor-shell](../shell) (empty without it; `available` says which). Roles: `hwnd`, `title`, `appName`, `processPath`, `active`, `flashing`, `icon` (an `image://` URL). `activate(hwnd)` (focus, or minimise if focused), `minimize(hwnd)`, `close(hwnd)`. |
 
 One bar per monitor:

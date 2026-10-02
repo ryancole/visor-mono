@@ -40,6 +40,13 @@ public:
         bool hidden = false;
     };
 
+    // A desktop (virtual desktop) run by visor-wm.
+    struct Workspace
+    {
+        QString name;
+        int windows = 0;
+    };
+
     explicit ShellLink(QObject *parent = nullptr);
     ~ShellLink() override;
 
@@ -50,6 +57,9 @@ public:
     const QList<Task> &tasks() const { return m_tasks; }
     quintptr activeTask() const { return m_active; }
     const QList<TrayIcon> &trayIcons() const { return m_trayIcons; }
+    const QList<Workspace> &workspaces() const { return m_workspaces; }
+    int activeWorkspace() const { return m_activeWorkspace; }
+    quint32 wmPid() const { return m_wmPid; } // visor-wm, which switches desktops
 
     // Sends a message to visor-shell; dropped when not connected.
     void send(const QJsonObject &message);
@@ -75,6 +85,7 @@ signals:
     void trayIconAdded(const ShellLink::TrayIcon &icon);
     void trayIconChanged(const ShellLink::TrayIcon &icon);
     void trayIconRemoved(int id);
+    void workspacesChanged();
     // visor-shell is handing the session to Explorer.
     void quitRequested();
 
@@ -90,4 +101,7 @@ private:
     QList<Task> m_tasks;
     quintptr m_active = 0;
     QList<TrayIcon> m_trayIcons;
+    QList<Workspace> m_workspaces;
+    int m_activeWorkspace = 0;
+    quint32 m_wmPid = 0;
 };

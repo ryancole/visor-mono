@@ -37,6 +37,8 @@ public:
 
     bool connected() const { return m_client != nullptr; }
     void send(const QJsonObject &message);
+    // To visor-wm's window, if it is running.
+    void sendToWm(const QJsonObject &message);
 
     // Window procedure body; called from the Win32 window procedure.
     std::intptr_t handleMessage(void *window, unsigned msg, std::uintptr_t wParam, std::intptr_t lParam);
@@ -48,6 +50,8 @@ signals:
     void clientDisconnected();
     // Any other message from Visor (e.g. "tray.click").
     void messageReceived(const QJsonObject &message);
+    // A message from visor-wm (desktop state, for Visor).
+    void wmMessageReceived(const QJsonObject &message);
 
 private:
     void launch();

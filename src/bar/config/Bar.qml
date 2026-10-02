@@ -13,7 +13,8 @@ PanelWindow {
         precision: SystemClock.Minutes
     }
 
-    // Left: open windows (with visor-shell), focused app and window title.
+    // Left: desktops and open windows (with visor-shell / visor-wm), focused
+    // app and window title.
     Row {
         id: left
         anchors.left: parent.left
@@ -21,6 +22,10 @@ PanelWindow {
         anchors.verticalCenter: parent.verticalCenter
         width: Math.max(0, center.x - x - 24)
         spacing: 8
+
+        Desktops {
+            anchors.verticalCenter: parent.verticalCenter
+        }
 
         TaskList {
             anchors.verticalCenter: parent.verticalCenter

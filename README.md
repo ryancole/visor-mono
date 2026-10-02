@@ -5,7 +5,7 @@ Omarchy-style desktop: tiling, keyboard-driven, themeable. Native C++ and Qt,
 event-driven, small. It can run as a plain app under Explorer, or replace
 `explorer.exe` as the Windows shell.
 
-Status: **phase 3b**: Hyprland-style tiling and key bindings (`visor-wm`) on top of phase 2's desktop, wallpaper, task list and tray in Visor, app bars and work areas, fullscreen detection and Visor supervision. Phase 0 results (what breaks without Explorer) are in [docs/phase0-compat.md](docs/phase0-compat.md).
+Status: **phase 3c**: Hyprland-style tiling, key bindings and Windows-style virtual desktops (`visor-wm`) on top of phase 2's desktop, wallpaper, task list and tray in Visor, app bars and work areas, fullscreen detection and Visor supervision. Phase 0 results (what breaks without Explorer) are in [docs/phase0-compat.md](docs/phase0-compat.md).
 See [docs/design.md](docs/design.md) for the architecture and plan.
 
 | Program | Source | What it is |
@@ -33,7 +33,7 @@ If sign-in lands on a black or broken desktop, try these in order:
 6. **Edit the registry by hand.** Delete the `Shell` value under `HKCU\Software\Microsoft\Windows NT\CurrentVersion\Winlogon`. The machine-wide `HKLM` value is never touched.
 7. **Revert the VM** to its `clean` checkpoint.
 
-Logs are in `%LOCALAPPDATA%\visor-shell\logs\` (`session.log`, `shell.log`, `wm.log`).
+Logs are in `%LOCALAPPDATA%\visor-shell\logs\` (`session.log`, `shell.log`, `wm.log`). Windows hidden on other desktops are listed in `%LOCALAPPDATA%\visor-shell\wm-hidden.txt` while `visor-wm` runs.
 
 ## Building
 
@@ -114,7 +114,25 @@ The default bindings follow Omarchy. They are all `bind` lines in `wm.conf`, in 
 | Super+Shift+arrows | Swap the window with its neighbour |
 | Super+minus / equal | Narrower / wider (add Shift for shorter / taller) |
 
-Windows reserves some Win-key combinations even without Explorer (Win+arrows, Win+Shift+arrows, Win+Return, Win+=), so `visor-wm` catches those with a keyboard hook instead of a hotkey. One limit comes with that: they don't work while an app running as administrator has focus. Win+L always locks the screen. Workspaces come next, in phase 3c.
+Windows reserves some Win-key combinations even without Explorer (Win+arrows, Win+Shift+arrows, Win+Return, Win+=), so `visor-wm` catches those with a keyboard hook instead of a hotkey. One limit comes with that: they don't work while an app running as administrator has focus. Win+L always locks the screen.
+
+### Desktops
+
+Windows 11's virtual desktops live in Explorer, so they're gone in replace mode. `visor-wm` provides its own, working the way Windows' do:
+
+| Keys | Action |
+| --- | --- |
+| Win+Ctrl+D | New desktop (and go to it) |
+| Win+Ctrl+Left / Right | Previous / next desktop |
+| Win+Ctrl+F4 | Close the desktop; its windows move to the one on the left |
+| Win+Ctrl+Shift+Left / Right | Move the window to the previous / next desktop, and go with it |
+
+- Create as many as you like. They're named "Desktop 1", "Desktop 2"..., and each one covers every monitor.
+- Visor's task list shows only the current desktop's windows, which is Windows' default.
+- Once there are two or more desktops, the bar shows them as numbered pills. Click one to switch, or scroll over them.
+- Windows has no key for moving a window to another desktop (it uses Task View), so the last row is our addition.
+- Windows on other desktops are hidden. If `visor-wm` stops unexpectedly, the next one shows them again, so no window is ever lost.
+
 
 ## Phase 0 hotkeys
 

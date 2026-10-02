@@ -259,6 +259,12 @@ bool parseBinding(const QString &flags, const QString &value, Binding *binding, 
     } else if (d == QLatin1String("resizeactive")) {
         const QStringList xy = arg.split(QLatin1Char(' '), Qt::SkipEmptyParts);
         ok = xy.size() == 2 && isInt(xy[0]) && isInt(xy[1]);
+    } else if (d == QLatin1String("workspace") || d == QLatin1String("movetoworkspace")
+               || d == QLatin1String("movetoworkspacesilent")) {
+        ok = arg == QLatin1String("new") || arg == QLatin1String("e+1") || arg == QLatin1String("e-1")
+             || arg == QLatin1String("+1") || arg == QLatin1String("-1") || (isInt(arg) && arg.toInt() >= 1);
+    } else if (d == QLatin1String("closeworkspace")) {
+        ok = true;
     } else {
         *error = QStringLiteral("unknown dispatcher \"%1\"").arg(d);
         return false;

@@ -255,6 +255,41 @@ void raise(quintptr hwnd)
                  SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_ASYNCWINDOWPOS);
 }
 
+bool isVisible(quintptr hwnd)
+{
+    return IsWindowVisible(toHwnd(hwnd));
+}
+
+quint32 processId(quintptr hwnd)
+{
+    return processId(toHwnd(hwnd));
+}
+
+quintptr owner(quintptr hwnd)
+{
+    return reinterpret_cast<quintptr>(GetWindow(toHwnd(hwnd), GW_OWNER));
+}
+
+quintptr rootOwner(quintptr hwnd)
+{
+    return reinterpret_cast<quintptr>(GetAncestor(toHwnd(hwnd), GA_ROOTOWNER));
+}
+
+quintptr shellWindow()
+{
+    return reinterpret_cast<quintptr>(GetShellWindow());
+}
+
+void hide(quintptr hwnd)
+{
+    ShowWindowAsync(toHwnd(hwnd), SW_HIDE);
+}
+
+void show(quintptr hwnd)
+{
+    ShowWindowAsync(toHwnd(hwnd), SW_SHOWNA);
+}
+
 bool moveTo(quintptr window, const Rect &target)
 {
     const HWND hwnd = toHwnd(window);

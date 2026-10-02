@@ -80,6 +80,7 @@ void Supervisor::onExited()
     m_notifier = nullptr;
     m_process = nullptr;
     m_pid = 0;
+    emit exited();
 
     if (code == 0 || code == DWORD(exitcode::AlreadyRunning))
         return;

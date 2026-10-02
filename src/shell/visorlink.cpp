@@ -180,21 +180,36 @@ void VisorLink::onProcessExited()
     });
 }
 
-void VisorLink::send(const QJsonObject &message)
+namespace {
+
+bool sendTo(HWND target, HWND from, const QJsonObject &message)
 {
-    if (!m_client)
-        return;
     const QByteArray payload = QJsonDocument(message).toJson(QJsonDocument::Compact);
     COPYDATASTRUCT cds{};
     cds.dwData = link::kLinkMagic;
     cds.cbData = DWORD(payload.size());
     cds.lpData = const_cast<char *>(payload.constData());
     DWORD_PTR result = 0;
-    if (!SendMessageTimeoutW(static_cast<HWND>(m_client), WM_COPYDATA, WPARAM(m_hwnd), LPARAM(&cds),
-                             SMTO_ABORTIFHUNG | SMTO_BLOCK, kSendTimeoutMs, &result)) {
+    return SendMessageTimeoutW(target, WM_COPYDATA, WPARAM(from), LPARAM(&cds), SMTO_ABORTIFHUNG | SMTO_BLOCK,
+                               kSendTimeoutMs, &result);
+}
+
+} // namespace
+
+void VisorLink::send(const QJsonObject &message)
+{
+    if (!m_client)
+        return;
+    if (!sendTo(static_cast<HWND>(m_client), static_cast<HWND>(m_hwnd), message)) {
         qWarning() << "Visor did not take" << message.value(QStringLiteral("type")).toString() << "error"
                    << GetLastError();
     }
+}
+
+void VisorLink::sendToWm(const QJsonObject &message)
+{
+    if (const HWND wm = FindWindowW(link::kWmClass, nullptr))
+        sendTo(wm, static_cast<HWND>(m_hwnd), message);
 }
 
 std::intptr_t VisorLink::handleMessage(void *window, unsigned msg, std::uintptr_t wParam, std::intptr_t lParam)
@@ -210,6 +225,15 @@ std::intptr_t VisorLink::handleMessage(void *window, unsigned msg, std::uintptr_
         QJsonDocument::fromJson(QByteArray(static_cast<const char *>(cds->lpData), int(cds->cbData))).object();
     const QString type = message.value(QStringLiteral("type")).toString();
 
+    // visor-wm's desktop state, for Visor (linkprotocol.h).
+    if (type == QLatin1String("workspaces")) {
+        wchar_t cls[32] = {};
+        GetClassNameW(reinterpret_cast<HWND>(wParam), cls, int(std::size(cls)));
+        if (wcscmp(cls, link::kWmClass) != 0)
+            return FALSE;
+        QMetaObject::invokeMethod(this, [this, message] { emit wmMessageReceived(message); }, Qt::QueuedConnection);
+        return TRUE;
+    }
     if (type == QLatin1String("hello")) {
         const auto client = reinterpret_cast<HWND>(wParam);
         DWORD pid = 0;
