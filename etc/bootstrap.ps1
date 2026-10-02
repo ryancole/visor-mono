@@ -31,16 +31,6 @@ if ((Test-Path "$QtPrefix\lib\cmake\Qt6\Qt6Config.cmake") -and -not $Force) {
 if ($Force -and (Test-Path $QtRoot)) { Remove-Item -Recurse -Force $QtRoot }
 New-Item -ItemType Directory -Force $Deps | Out-Null
 
-# visor pins the same Qt; if it is checked out next to this repo, share its
-# toolchain through a junction instead of downloading another copy.
-$SiblingQt = Join-Path (Split-Path -Parent $Root) 'visor\.deps\Qt'
-if (-not $Force -and (Test-Path "$SiblingQt\$QtVersion\$QtArchDir\lib\cmake\Qt6\Qt6Config.cmake")) {
-    if (Test-Path $QtRoot) { Remove-Item -Recurse -Force $QtRoot }
-    New-Item -ItemType Junction -Path $QtRoot -Target $SiblingQt | Out-Null
-    Write-Host "Linked .deps\Qt to visor's Qt $QtVersion ($SiblingQt)"
-    exit 0
-}
-
 if (Get-Command py -ErrorAction SilentlyContinue) { $py = 'py'; $pyArgs = @('-3') }
 elseif (Get-Command python -ErrorAction SilentlyContinue) { $py = 'python'; $pyArgs = @() }
 else { throw 'Python 3 is required to install Qt (https://www.python.org/downloads/).' }

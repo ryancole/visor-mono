@@ -70,12 +70,13 @@ for (`$i = 0; `$i -lt $clicks; `$i++) {
 $c = Import-Clixml $credFile
 Invoke-Command -VMName $Name -Credential $c -ArgumentList "$prelude`n$body" {
     param($script)
-    Set-Content C:\visor-shell\input.ps1 $script
+    New-Item -ItemType Directory -Force C:\visor | Out-Null
+    Set-Content C:\visor\input.ps1 $script
     $user = (Get-CimInstance Win32_ComputerSystem).UserName
     # conhost --headless: no console window. A plain powershell.exe would be
     # handed to Windows Terminal, whose window takes the foreground and spoils
     # whatever the input was meant for.
-    $action = New-ScheduledTaskAction -Execute conhost.exe -Argument '--headless powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\visor-shell\input.ps1'
+    $action = New-ScheduledTaskAction -Execute conhost.exe -Argument '--headless powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\visor\input.ps1'
     Register-ScheduledTask -TaskName visor-input -Action $action -Principal (New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive) -Force | Out-Null
     Start-ScheduledTask visor-input
     # Wait for it to finish so callers can screenshot the result.

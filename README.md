@@ -52,9 +52,6 @@ an IDE with CMake presets support you can use `cmake --preset debug` /
 `cmake --build --preset debug` directly. All executables, the Qt runtime and the
 bar's default config land in one folder, `build/<preset>/`.
 
-If the old standalone `visor` repo is checked out next to this one,
-`etc/bootstrap.ps1` links its Qt instead of downloading another copy.
-
 ## Layout
 
 ```
