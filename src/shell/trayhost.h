@@ -59,14 +59,12 @@ private:
     void remove(int index);
     void pruneDeadOwners();
     void placeWindow();
-    void loadShellServiceObjects();
 
     AppBars *m_appBars;
     void *m_hwnd = nullptr;
     void *m_notifyHwnd = nullptr;
     QList<Icon> m_icons;
     int m_nextId = 1;
-    QList<void *> m_serviceObjects; // IOleCommandTarget*
     // Where the last click happened; apps ask for their icon's rect right
     // after a click to position flyouts.
     int m_lastClickId = 0;

@@ -5,9 +5,7 @@
 #include <QDebug>
 
 #include <windows.h>
-#include <docobj.h>
 #include <shellapi.h>
-#include <shlguid.h>
 
 namespace visor {
 
@@ -125,16 +123,10 @@ TrayHost::TrayHost(AppBars *appBars, QObject *parent)
     SendNotifyMessageW(HWND_BROADCAST, RegisterWindowMessageW(L"TaskbarCreated"), 0, 0);
     qInfo() << "hosting the notification area";
 
-    loadShellServiceObjects();
 }
 
 TrayHost::~TrayHost()
 {
-    for (void *p : m_serviceObjects) {
-        auto *target = static_cast<IOleCommandTarget *>(p);
-        target->Exec(&CGID_ShellServiceObject, OLECMDID_SAVE, OLECMDEXECOPT_DODEFAULT, nullptr, nullptr);
-        target->Release();
-    }
     for (const Icon &icon : m_icons) {
         if (icon.icon)
             DestroyIcon(reinterpret_cast<HICON>(icon.icon));
@@ -143,22 +135,11 @@ TrayHost::~TrayHost()
         DestroyWindow(static_cast<HWND>(m_hwnd));
 }
 
-// The system icons (volume, network, power) came from shell service objects
-// that Explorer loads at startup. On Windows 11 these may no longer add
-// anything; loading them is cheap to try.
-void TrayHost::loadShellServiceObjects()
-{
-    static const CLSID kSysTray = {0x35CEC8A3, 0x2BE6, 0x11D2, {0x87, 0x73, 0x92, 0xE2, 0x20, 0x52, 0x41, 0x53}};
-    IOleCommandTarget *target = nullptr;
-    HRESULT hr = CoCreateInstance(kSysTray, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&target));
-    if (FAILED(hr)) {
-        qInfo() << "SysTray service object unavailable" << Qt::hex << hr;
-        return;
-    }
-    hr = target->Exec(&CGID_ShellServiceObject, OLECMDID_NEW, OLECMDEXECOPT_DODEFAULT, nullptr, nullptr);
-    qInfo() << "SysTray service object started" << Qt::hex << hr;
-    m_serviceObjects.append(target);
-}
+// Explorer also loaded the "SysTray" shell service object, which registers
+// the classic volume, network and power icons. Windows 11's taskbar draws
+// its own instead, and so does Visor (the volume widget); the classic ones
+// are white, for a dark taskbar, and their flyouts live in Explorer. So it
+// isn't loaded: one icon fewer, about 5 MB less.
 
 void TrayHost::placeWindow()
 {
