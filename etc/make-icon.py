@@ -1,21 +1,28 @@
-"""Generates src/resources/visor.ico (16-256 px PNG entries, no dependencies).
+"""Generates src/bar/resources/visor.ico (16-256 px PNG entries, no dependencies).
 
-The mark is a dark rounded tile with a bright bar across the top: a status bar.
+The mark is a blue rounded tile, filled so it weighs the same as other
+square icons on a dark or light taskbar: a white bar across the top (the
+status bar) over three tiled panes (dwindle's first split, then the second).
 Re-run after editing the drawing code:  py -3 etc/make-icon.py
 """
 import struct
 import zlib
 from pathlib import Path
 
-OUT = Path(__file__).resolve().parent.parent / "src" / "resources" / "visor.ico"
+OUT = Path(__file__).resolve().parent.parent / "src" / "bar" / "resources" / "visor.ico"
 SIZES = [16, 20, 24, 32, 40, 48, 64, 256]
 SS = 4  # supersampling factor for anti-aliasing
 
-TILE = (0x1E, 0x1E, 0x28)
-BAR = (0x8A, 0xB4, 0xFF)
+TILE_TOP = (0x6E, 0x9C, 0xFF)
+TILE_BOTTOM = (0x2B, 0x55, 0xD6)
+BAR = (0xFF, 0xFF, 0xFF)
+PANE = (0xD6, 0xE4, 0xFF)
+PANES = [(0.16, 0.37, 0.46, 0.85), (0.54, 0.37, 0.84, 0.57), (0.54, 0.65, 0.84, 0.85)]
 
 
 def inside_rounded(x, y, x0, y0, x1, y1, r):
+    if not (x0 <= x <= x1 and y0 <= y <= y1):
+        return False
     cx = min(max(x, x0 + r), x1 - r)
     cy = min(max(y, y0 + r), y1 - r)
     return (x - cx) ** 2 + (y - cy) ** 2 <= r * r
@@ -25,9 +32,13 @@ def pixel(u, v):
     """Colour at normalised coords (0..1), or None for transparent."""
     if not inside_rounded(u, v, 0.03, 0.03, 0.97, 0.97, 0.2):
         return None
-    if inside_rounded(u, v, 0.16, 0.18, 0.84, 0.36, 0.09):
+    if inside_rounded(u, v, 0.16, 0.15, 0.84, 0.29, 0.07):
         return BAR
-    return TILE
+    for pane in PANES:
+        if inside_rounded(u, v, *pane, 0.05):
+            return PANE
+    # A gradient from top to bottom.
+    return tuple(int(a + (b - a) * v) for a, b in zip(TILE_TOP, TILE_BOTTOM))
 
 
 def render(size):

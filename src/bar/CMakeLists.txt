@@ -18,6 +18,9 @@ qt_add_executable(visor WIN32
     resources/resource.h
     resources/visor.rc
 )
+# rc.exe reports no dependencies, so a new icon wouldn't rebuild it.
+set_source_files_properties(resources/visor.rc PROPERTIES
+    OBJECT_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/resources/visor.ico)
 
 # Everything QML-facing lives in the `Visor` module, compiled into the exe.
 # User configs `import Visor` to get these types.
