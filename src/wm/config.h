@@ -70,8 +70,8 @@ struct Binding
 //   source = file               reads another file here (~ and %VAR% expand;
 //                               relative to this file; skipped if missing)
 //   section { key = value }     the same as section:key = value
-//   general:gaps_in, gaps_out, border_size, col.active_border, col.inactive_border
-//     (colours as rgb(rrggbb), rgba(rrggbbaa), 0xaarrggbb, or accent)
+//   general:gaps_in, gaps_out (window borders are Windows' own, so
+//     border_size and col.* are not supported)
 //   dwindle:default_split_ratio, preserve_split, force_split, split_width_multiplier
 //   windowrule = float|tile, class:<regex>, title:<regex>, exe:<regex>
 //   bind, bindd, binde, ... (see Binding)
@@ -80,19 +80,6 @@ struct Config
 {
     int gapsIn = 5;
     int gapsOut = 10;
-    // 0 turns border colouring off. Windows always draws 1 px borders, so
-    // other sizes only mean "on".
-    int borderSize = 2;
-    // A border colour is 0xRRGGBB, or `accent`: Windows' accent colour,
-    // followed as it changes (the default for the focused window, as
-    // Windows' own "show accent colour on borders" draws it).
-    struct BorderColor
-    {
-        bool accent = false;
-        quint32 rgb = 0x595959;
-    };
-    BorderColor activeBorder{true, 0x0078d4};
-    BorderColor inactiveBorder{false, 0x595959};
     DwindleLayout::Options dwindle;
     QList<WindowRule> rules;
     QList<Binding> bindings;

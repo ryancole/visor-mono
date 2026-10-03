@@ -25,7 +25,6 @@ namespace visor::wm {
 namespace {
 
 constexpr int kSettleMs = 300;
-constexpr int kRecolorMs = 150;
 constexpr int kFocusAfterSwitchMs = 50; // let the shown windows appear first
 constexpr UINT kSendTimeoutMs = 500;
 constexpr UINT kHookKeyMessage = WM_APP + 1; // from KeyHook; wParam = binding id
@@ -137,7 +136,6 @@ WindowManager::WindowManager(Config config, bool hosted, QObject *parent)
     , m_config(std::move(config))
     , m_hosted(hosted)
 {
-    m_accent = win::accentColor();
     g_instance = this;
     m_desktops.push_back(std::make_unique<Desktop>());
 
@@ -150,15 +148,6 @@ WindowManager::WindowManager(Config config, bool hosted, QObject *parent)
     connect(&m_learnTimer, &QTimer::timeout, this, [this] {
         if (learnMinimumSizes())
             arrangeAll();
-    });
-    m_recolorTimer.setSingleShot(true);
-    m_recolorTimer.setInterval(kRecolorMs);
-    connect(&m_recolorTimer, &QTimer::timeout, this, [this] {
-        if (m_previousActive && m_previousActive != m_active && m_colored.contains(m_previousActive)
-            && win::exists(m_previousActive))
-            colorBorder(m_previousActive, false);
-        if (m_active && m_colored.contains(m_active) && win::exists(m_active))
-            colorBorder(m_active, true);
     });
     m_stateTimer.setSingleShot(true);
     m_stateTimer.setInterval(0);
@@ -235,10 +224,6 @@ WindowManager::~WindowManager()
         }
         QFile::remove(stateFile());
     }
-    for (quintptr w : std::as_const(m_colored)) {
-        if (win::exists(w))
-            win::resetBorderColor(w);
-    }
     if (m_hwnd)
         DestroyWindow(static_cast<HWND>(m_hwnd));
 }
@@ -249,16 +234,6 @@ void WindowManager::setConfig(Config config)
     m_config = std::move(config);
     registerBindings();
     sendBindings();
-    for (quintptr w : std::as_const(m_colored)) {
-        if (!win::exists(w))
-            continue;
-        if (m_config.borderSize > 0)
-            win::setBorderColor(w, borderColor(w == m_active));
-        else
-            win::resetBorderColor(w);
-    }
-    if (m_config.borderSize <= 0)
-        m_colored.clear();
     arrangeAll();
 }
 
@@ -290,7 +265,6 @@ void WindowManager::handleEvent(unsigned event, quintptr hwnd)
         consider(hwnd);
         break;
     case EVENT_OBJECT_DESTROY:
-        m_colored.remove(hwnd);
         m_tileOverride.remove(hwnd);
         m_floatFullscreen.remove(hwnd);
         m_minimumSize.remove(hwnd);
@@ -301,8 +275,6 @@ void WindowManager::handleEvent(unsigned event, quintptr hwnd)
             saveState();
         if (hwnd == m_active)
             m_active = 0;
-        if (hwnd == m_previousActive)
-            m_previousActive = 0;
         m_focusedAt.remove(hwnd);
         if (m_managed.contains(hwnd))
             unmanage(hwnd);
@@ -392,13 +364,6 @@ std::intptr_t WindowManager::handleMessage(void *window, unsigned msg, std::uint
         refreshMonitors();
         arrangeAll();
         settleSoon();
-    }
-    // Windows' accent changed (Settings, a theme, Visor): DWM's notice, and
-    // the broadcast every app reloads its colours on.
-    if (msg == WM_DWMCOLORIZATIONCOLORCHANGED
-        || (msg == WM_SETTINGCHANGE && lParam
-            && wcscmp(reinterpret_cast<const wchar_t *>(lParam), L"ImmersiveColorSet") == 0)) {
-        refreshAccent();
     }
     return DefWindowProcW(static_cast<HWND>(window), msg, WPARAM(wParam), LPARAM(lParam));
 }
@@ -532,7 +497,6 @@ void WindowManager::manage(quintptr hwnd)
         win::unmaximize(hwnd);
     ws.layout.insert(hwnd, target, m_monitors.value(monitor).work, m_config.dwindle, cursor.x, cursor.y);
     m_managed.insert(hwnd, {desktop, monitor, false, false});
-    colorBorder(hwnd, hwnd == m_active);
     qInfo().noquote() << "tile" << win::exeName(hwnd) << win::className(hwnd)
                       << QLatin1Char('"') + win::title(hwnd) + QLatin1Char('"') << "on" << monitor << "desktop"
                       << indexOf(desktop) + 1;
@@ -679,51 +643,14 @@ void WindowManager::settleSoon()
 
 void WindowManager::focusChanged(quintptr hwnd)
 {
-    if (m_active && m_active != hwnd && m_colored.contains(m_active) && win::exists(m_active))
-        colorBorder(m_active, false);
-    if (m_active != hwnd)
-        m_previousActive = m_active;
     m_active = hwnd;
-    if (hwnd)
-        m_focusedAt.insert(hwnd, ++m_focusCount);
-    m_recolorTimer.start();
     if (!hwnd)
         return;
-    if (win::classify(hwnd, m_config) != win::Kind::Ignore)
-        colorBorder(hwnd, true);
+    m_focusedAt.insert(hwnd, ++m_focusCount);
     if (Desktop *desktop = m_desktopOf.value(hwnd))
         desktop->lastFocused = hwnd;
     if (const auto it = m_managed.constFind(hwnd); it != m_managed.cend())
         workspaceOf(*it).lastFocused = hwnd;
-}
-
-void WindowManager::colorBorder(quintptr hwnd, bool active)
-{
-    if (m_config.borderSize <= 0)
-        return;
-    win::setBorderColor(hwnd, borderColor(active));
-    m_colored.insert(hwnd);
-}
-
-quint32 WindowManager::borderColor(bool active) const
-{
-    const Config::BorderColor &c = active ? m_config.activeBorder : m_config.inactiveBorder;
-    return c.accent ? m_accent : c.rgb;
-}
-
-void WindowManager::refreshAccent()
-{
-    const quint32 accent = win::accentColor();
-    if (accent == m_accent)
-        return;
-    m_accent = accent;
-    if (m_config.borderSize <= 0 || (!m_config.activeBorder.accent && !m_config.inactiveBorder.accent))
-        return;
-    qInfo().noquote() << "accent colour is now" << QStringLiteral("#%1").arg(accent, 6, 16, QLatin1Char('0'));
-    for (quintptr w : std::as_const(m_colored)) {
-        if (win::exists(w))
-            win::setBorderColor(w, borderColor(w == m_active));
-    }
 }
 
 // ---- Desktops -------------------------------------------------------------

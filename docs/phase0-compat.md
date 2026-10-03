@@ -78,7 +78,7 @@ Phase 8, same build. Tested with `pwsh etc/vm/deploy.ps1 -Hosted` after Ctrl+Alt
 | Alt+Tab is Windows' | Alt held, Tab | ✅ | Windows' switcher with its previews |
 | Win+N is Windows' | Win+N | ✅ | Windows' Notification Center, and it isn't tiled |
 | Windows desktops | Win+Ctrl+D, open Notepad, Win+Ctrl+Left | ✅ | The new desktop is empty and the bar shows no pills; Notepad tiles alone there ("on Windows desktop 957c…", "desktop 2"); back on the first, the Notepad + Terminal layout is as it was |
-| Win+arrows move focus | Win+Right from Notepad | ✅ | "SUPER+right -> movefocus r"; the terminal gets the accent border and the caret |
+| Win+arrows move focus | Win+Right from Notepad | ✅ | "SUPER+right -> movefocus r"; the terminal gets focus and the caret |
 | Win+arrows move the window | Win+arrows on PowerShell among Edge, Claude and Battle.net | ✅ | "SUPER+left -> movewindow l" and the rest in `wm.log`; Ryan moved it around all four ways and it did what he expected |
 | Win+Up on a full-height column | PowerShell as the right column beside Claude over Battle.net | ✅ | PowerShell beside Claude in the top row, Battle.net across the bottom row |
 | Win+Down from the top row | PowerShell beside Claude, Battle.net across the bottom | ✅ | The first press makes PowerShell the full-height right column again, the second puts it beside Battle.net in the bottom row; Win+Up goes back the same way |

@@ -13,10 +13,6 @@ namespace visor::wm::win {
 
 namespace {
 
-// Not in older SDK headers.
-constexpr DWORD kBorderColor = 34;              // DWMWA_BORDER_COLOR
-constexpr COLORREF kColorDefault = 0xFFFFFFFF;  // DWMWA_COLOR_DEFAULT
-
 HWND toHwnd(quintptr hwnd)
 {
     return reinterpret_cast<HWND>(hwnd);
@@ -369,35 +365,6 @@ bool moveTo(quintptr window, const Rect &target)
     SetWindowPos(hwnd, nullptr, want.left, want.top, want.right - want.left, want.bottom - want.top,
                  SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
     return true;
-}
-
-void setBorderColor(quintptr hwnd, quint32 rgb)
-{
-    const COLORREF color = RGB((rgb >> 16) & 0xff, (rgb >> 8) & 0xff, rgb & 0xff);
-    DwmSetWindowAttribute(toHwnd(hwnd), kBorderColor, &color, sizeof(color));
-}
-
-void resetBorderColor(quintptr hwnd)
-{
-    const COLORREF color = kColorDefault;
-    DwmSetWindowAttribute(toHwnd(hwnd), kBorderColor, &color, sizeof(color));
-}
-
-quint32 accentColor()
-{
-    // The value Settings writes (0xAABBGGRR) and that DWM and every app read
-    // on the "ImmersiveColorSet" broadcast. DwmGetColorizationColor lags it.
-    DWORD value = 0;
-    DWORD size = sizeof(value);
-    if (RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\DWM", L"AccentColor", RRF_RT_REG_DWORD,
-                     nullptr, &value, &size) == ERROR_SUCCESS) {
-        return ((value & 0xff) << 16) | (value & 0xff00) | ((value >> 16) & 0xff);
-    }
-    DWORD argb = 0;
-    BOOL opaque = FALSE;
-    if (SUCCEEDED(DwmGetColorizationColor(&argb, &opaque)))
-        return argb & 0xffffff;
-    return 0x0078d4; // Windows' default blue
 }
 
 } // namespace visor::wm::win

@@ -56,8 +56,7 @@ class WindowManager : public QObject
 public:
     // hosted: Explorer is the shell (see above).
     WindowManager(Config config, bool hosted, QObject *parent = nullptr);
-    // Shows windows hidden on other desktops (unless handed over) and puts
-    // window border colours back to the system default.
+    // Shows windows hidden on other desktops (unless handed over).
     ~WindowManager() override;
 
     // On exit, leave windows on other desktops hidden and recorded, for the
@@ -133,11 +132,6 @@ private:
     void settleSoon();
 
     void focusChanged(quintptr hwnd);
-    void colorBorder(quintptr hwnd, bool active);
-    // The configured colour, with `accent` resolved to Windows' current one.
-    quint32 borderColor(bool active) const;
-    // Re-reads Windows' accent colour; recolours the borders if it changed.
-    void refreshAccent();
 
     // Desktops.
     // Hosted mode: the Desktop for the Windows desktop `hwnd` is on (made on
@@ -189,7 +183,6 @@ private:
 
     Config m_config;
     const bool m_hosted;
-    quint32 m_accent = 0x0078d4; // Windows' accent colour, 0xRRGGBB
     void *m_hwnd = nullptr; // hidden window: broadcasts, hotkeys, messages from the shell
     QList<void *> m_hooks;
     QHash<QString, Monitor> m_monitors;          // by device name, e.g. \\.\DISPLAY1
@@ -208,16 +201,10 @@ private:
     QHash<quintptr, Rect> m_floatFullscreen;     // floating windows in fullscreen 0: their old frame
     qsizetype m_registeredBindings = 0;
     std::unique_ptr<KeyHook> m_keyHook;
-    QSet<quintptr> m_colored;                    // windows whose border we've set
     quintptr m_active = 0;
-    quintptr m_previousActive = 0;
     QHash<quintptr, quint64> m_focusedAt; // focus order, for ties in movefocus
     quint64 m_focusCount = 0;
     QTimer m_settleTimer;
-    // Apps with themed frames (e.g. Windows Terminal) set their own border
-    // colour when they're activated, after our focus event; colour again once
-    // they're done.
-    QTimer m_recolorTimer;
     QTimer m_stateTimer; // coalesces desktop state updates to Visor
     QTimer m_learnTimer; // after a layout: learnMinimumSizes once windows have resized
 };

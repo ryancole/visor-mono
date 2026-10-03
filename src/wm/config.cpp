@@ -40,38 +40,6 @@ bool parseInt(const QString &value, int *out)
     return ok;
 }
 
-// rgb(rrggbb), rgba(rrggbbaa) or 0xaarrggbb. Hyprland borders can be
-// gradients ("rgba(...) rgba(...) 45deg"); Windows draws one colour, the first.
-bool parseColor(const QString &value, quint32 *out)
-{
-    const QString first = value.section(QLatin1Char(' '), 0, 0, QString::SectionSkipEmpty).toLower();
-    bool ok = false;
-    if (first.startsWith(QLatin1String("rgb(")) && first.endsWith(QLatin1Char(')')) && first.size() == 11) {
-        const quint32 rgb = first.mid(4, 6).toUInt(&ok, 16);
-        if (ok)
-            *out = rgb;
-    } else if (first.startsWith(QLatin1String("rgba(")) && first.endsWith(QLatin1Char(')')) && first.size() == 14) {
-        const quint32 rgb = first.mid(5, 6).toUInt(&ok, 16);
-        if (ok)
-            *out = rgb;
-    } else if (first.startsWith(QLatin1String("0x")) && first.size() == 10) {
-        const quint32 argb = first.mid(2).toUInt(&ok, 16);
-        if (ok)
-            *out = argb & 0xffffff;
-    }
-    return ok;
-}
-
-bool parseBorderColor(const QString &value, Config::BorderColor *out)
-{
-    if (value.trimmed().compare(QLatin1String("accent"), Qt::CaseInsensitive) == 0) {
-        out->accent = true;
-        return true;
-    }
-    out->accent = false;
-    return parseColor(value, &out->rgb);
-}
-
 QString substitute(QString value, const QHash<QString, QString> &variables)
 {
     // Longest names first, so $term doesn't eat the start of $terminal.
@@ -415,12 +383,6 @@ void parseInto(Config &config, ParseState &state, const QString &text, const QSt
             ok = parseInt(value, &config.gapsIn);
         } else if (key == QLatin1String("general:gaps_out")) {
             ok = parseInt(value, &config.gapsOut);
-        } else if (key == QLatin1String("general:border_size")) {
-            ok = parseInt(value, &config.borderSize);
-        } else if (key == QLatin1String("general:col.active_border")) {
-            ok = parseBorderColor(value, &config.activeBorder);
-        } else if (key == QLatin1String("general:col.inactive_border")) {
-            ok = parseBorderColor(value, &config.inactiveBorder);
         } else if (key == QLatin1String("general:layout")) {
             ok = value == QLatin1String("dwindle");
         } else if (key == QLatin1String("dwindle:default_split_ratio")) {

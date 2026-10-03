@@ -153,12 +153,11 @@ int main(int argc, char *argv[])
         });
     }
 
-    // Live reload of wm.conf and the files it sources (the theme's border
-    // colours in ~/.config/visor/current/wm.conf). Editors often save by
+    // Live reload of wm.conf and the files it sources. Editors often save by
     // replacing a file, which drops it from the watcher, so folders are
     // watched too and files re-added. A sourced file that doesn't exist yet
-    // is watched through its nearest existing parent folder, so the first
-    // theme ever applied is picked up as well.
+    // is watched through its nearest existing parent folder, so it is picked
+    // up once created.
     QFileSystemWatcher watcher;
     QTimer reloadTimer;
     QStringList watched;  // wm.conf and its sources

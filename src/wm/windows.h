@@ -77,12 +77,5 @@ void show(quintptr hwnd);
 // us. Returns false if nothing needed to change.
 bool moveTo(quintptr hwnd, const Rect &rect);
 
-// The colour Windows 11 draws the window's 1 px border with (0xRRGGBB), or
-// the system default with resetBorderColor. No-op on Windows 10.
-void setBorderColor(quintptr hwnd, quint32 rgb);
-void resetBorderColor(quintptr hwnd);
-// Windows' accent colour (what Settings > Colors sets), 0xRRGGBB.
-quint32 accentColor();
-
 } // namespace win
 } // namespace visor::wm
