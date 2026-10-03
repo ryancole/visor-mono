@@ -172,122 +172,135 @@ PanelWindow {
             anchors.verticalCenter: parent.verticalCenter
         }
 
-        // Windows' cluster: network, battery (laptops) and volume. Click
-        // opens Quick Settings, as on the taskbar (Win+A too); right-click
-        // mutes, scrolling changes the volume.
-        Rectangle {
+        // The cluster and the bell sit as close as the cluster's own icons:
+        // its 8px padding plus the bell's bearing is 13px of ink gap, so the
+        // bell tucks 3px into the padding to make it the cluster's 10px.
+        Row {
             anchors.verticalCenter: parent.verticalCenter
-            width: cluster.implicitWidth + 16
-            height: 24
-            radius: 6
-            color: clusterMouse.containsMouse ? Theme.surface : "transparent"
+            height: parent.height
+            spacing: -3
 
-            Row {
-                id: cluster
-                anchors.centerIn: parent
-                spacing: 10
-
-                Icon {
-                    id: networkIcon
-                    anchors.verticalCenter: parent.verticalCenter
-                    glyph: !Network.connected && Network.kind !== "wifi" ? "\uF384"
-                         : Network.kind === "ethernet" ? "\uE839"
-                         : Network.kind === "cellular" ? ["\uE871", "\uE86C", "\uE86D", "\uE86E", "\uE86F", "\uE870"][Network.signal]
-                         : Network.kind === "wifi" ? (!Network.connected ? "\uEB63"
-                                                      : Network.signal <= 1 ? "\uE872"
-                                                      : Network.signal === 2 ? "\uE873"
-                                                      : Network.signal === 3 ? "\uE874" : "\uE701")
-                         : "\uF384"
-                }
+            // Windows' cluster: network, battery (laptops) and volume. Click
+            // opens Quick Settings, as on the taskbar (Win+A too); right-click
+            // mutes, scrolling changes the volume.
+            Rectangle {
+                anchors.verticalCenter: parent.verticalCenter
+                width: cluster.implicitWidth + 16
+                height: 24
+                radius: 6
+                color: clusterMouse.containsMouse ? Theme.surface : "transparent"
 
                 Row {
-                    visible: Battery.present
-                    anchors.verticalCenter: parent.verticalCenter
-                    spacing: 6
+                    id: cluster
+                    anchors.centerIn: parent
+                    spacing: 10
+
                     Icon {
+                        id: networkIcon
                         anchors.verticalCenter: parent.verticalCenter
-                        // E850-E859 by tenth, E83F full; charging E85A-E863, E83E full.
-                        glyph: {
-                            const tenth = Math.min(10, Math.round(Battery.percent / 10))
-                            if (tenth >= 10)
-                                return Battery.charging ? "\uE83E" : "\uE83F"
-                            return String.fromCharCode((Battery.charging ? 0xE85A : 0xE850) + tenth)
+                        glyph: !Network.connected && Network.kind !== "wifi" ? "\uF384"
+                             : Network.kind === "ethernet" ? "\uE839"
+                             : Network.kind === "cellular" ? ["\uE871", "\uE86C", "\uE86D", "\uE86E", "\uE86F", "\uE870"][Network.signal]
+                             : Network.kind === "wifi" ? (!Network.connected ? "\uEB63"
+                                                          : Network.signal <= 1 ? "\uE872"
+                                                          : Network.signal === 2 ? "\uE873"
+                                                          : Network.signal === 3 ? "\uE874" : "\uE701")
+                             : "\uF384"
+                    }
+
+                    Row {
+                        visible: Battery.present
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 6
+                        Icon {
+                            anchors.verticalCenter: parent.verticalCenter
+                            // E850-E859 by tenth, E83F full; charging E85A-E863, E83E full.
+                            glyph: {
+                                const tenth = Math.min(10, Math.round(Battery.percent / 10))
+                                if (tenth >= 10)
+                                    return Battery.charging ? "\uE83E" : "\uE83F"
+                                return String.fromCharCode((Battery.charging ? 0xE85A : 0xE850) + tenth)
+                            }
+                        }
+                        Label {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: Battery.percent + "%"
                         }
                     }
-                    Label {
+
+                    // The speaker only, no percentage (Windows shows it on hover
+                    // and in the flyout). Its glyphs fill less of the em box than
+                    // Ethernet's and no-internet's, so it grows to match those.
+                    Icon {
                         anchors.verticalCenter: parent.verticalCenter
-                        text: Battery.percent + "%"
+                        opacity: Audio.muted ? 0.5 : 1
+                        font.pixelSize: ["\uE839", "\uF384"].includes(networkIcon.glyph)
+                                        ? Math.round((Theme.fontSize + 1) * 1.4) : Theme.fontSize + 1
+                        glyph: Audio.muted ? "\uE74F" // Mute
+                             : Audio.volume < 0.01 ? "\uE992" // Volume0
+                             : Audio.volume < 0.34 ? "\uE993"
+                             : Audio.volume < 0.67 ? "\uE994" : "\uE995"
                     }
                 }
 
-                // The speaker only, no percentage (Windows shows it on hover
-                // and in the flyout). Its glyphs fill less of the em box than
-                // Ethernet's and no-internet's, so it grows to match those.
+                MouseArea {
+                    id: clusterMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    acceptedButtons: Qt.LeftButton | Qt.RightButton
+                    onClicked: mouse => {
+                        if (mouse.button === Qt.RightButton)
+                            Audio.toggleMute()
+                        else if (bar.quickSettingsPopup)
+                            bar.quickSettingsPopup.toggle(bar.screen)
+                    }
+                    onWheel: wheel => Audio.volume += wheel.angleDelta.y > 0 ? 0.02 : -0.02
+                }
+            }
+
+            // Notifications: the bell, with how many came since you last looked;
+            // a moon while Do not disturb is on, as Windows 11's taskbar shows.
+            // Replace mode only; under Explorer the taskbar has its own.
+            Item {
+                visible: Notifications.available
+                width: bell.implicitWidth // the glyph's box: the gap is the cluster's padding
+                height: parent.height
+
                 Icon {
-                    anchors.verticalCenter: parent.verticalCenter
-                    opacity: Audio.muted ? 0.5 : 1
-                    font.pixelSize: ["\uE839", "\uF384"].includes(networkIcon.glyph)
-                                    ? Math.round((Theme.fontSize + 1) * 1.4) : Theme.fontSize + 1
-                    glyph: Audio.muted ? "\uE74F" // Mute
-                         : Audio.volume < 0.01 ? "\uE992" // Volume0
-                         : Audio.volume < 0.34 ? "\uE993"
-                         : Audio.volume < 0.67 ? "\uE994" : "\uE995"
-                }
-            }
-
-            MouseArea {
-                id: clusterMouse
-                anchors.fill: parent
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                acceptedButtons: Qt.LeftButton | Qt.RightButton
-                onClicked: mouse => {
-                    if (mouse.button === Qt.RightButton)
-                        Audio.toggleMute()
-                    else if (bar.quickSettingsPopup)
-                        bar.quickSettingsPopup.toggle(bar.screen)
-                }
-                onWheel: wheel => Audio.volume += wheel.angleDelta.y > 0 ? 0.02 : -0.02
-            }
-        }
-
-        // Notifications: the bell, with how many came since you last looked;
-        // a moon while Do not disturb is on, as Windows 11's taskbar shows.
-        // Replace mode only; under Explorer the taskbar has its own.
-        Item {
-            visible: Notifications.available
-            width: 24
-            height: parent.height
-
-            Icon {
-                anchors.centerIn: parent
-                glyph: Notifications.doNotDisturb ? "\uE708" : Notifications.unread > 0 ? "" : "" // RingerSolid / Ringer
-                font.pixelSize: 15
-            }
-
-            Rectangle {
-                visible: Notifications.unread > 0
-                anchors.top: parent.top
-                anchors.topMargin: 4
-                anchors.right: parent.right
-                width: 14
-                height: 14
-                radius: 7
-                color: Theme.accent
-
-                Label {
+                    id: bell
                     anchors.centerIn: parent
-                    text: Math.min(Notifications.unread, 9)
-                    color: Theme.background
-                    font.pixelSize: 9
-                    font.weight: Font.DemiBold
+                    glyph: Notifications.doNotDisturb ? "\uE708" : Notifications.unread > 0 ? "" : "" // RingerSolid / Ringer
+                    font.pixelSize: 15
                 }
-            }
 
-            MouseArea {
-                anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
-                onClicked: if (bar.notificationsPopup) bar.notificationsPopup.toggle(bar.screen)
+                Rectangle {
+                    visible: Notifications.unread > 0
+                    anchors.top: parent.top
+                    anchors.topMargin: 4
+                    anchors.right: parent.right
+                    anchors.rightMargin: -5
+                    width: 14
+                    height: 14
+                    radius: 7
+                    color: Theme.accent
+
+                    Label {
+                        anchors.centerIn: parent
+                        text: Math.min(Notifications.unread, 9)
+                        color: Theme.background
+                        font.pixelSize: 9
+                        font.weight: Font.DemiBold
+                    }
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    anchors.leftMargin: 3 // not over the cluster
+                    anchors.rightMargin: -5
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: if (bar.notificationsPopup) bar.notificationsPopup.toggle(bar.screen)
+                }
             }
         }
     }
