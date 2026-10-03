@@ -11,6 +11,7 @@ ShellRoot {
     CheatSheet { id: cheatSheet }
     ThemePicker { id: themePicker }
     NotificationCenter { id: notificationCenter }
+    QuickSettings { id: quickSettings }
     Switcher { id: switcher }
     // Overlays that never take focus: the volume / brightness display, and
     // toast pop-ups (replace mode only; under Explorer, Windows shows both).
@@ -21,7 +22,7 @@ ShellRoot {
     // "keys", "run", "theme" (the picker), "theme next" / "theme previous",
     // "theme <name or .theme path>", "volume up" / "volume down" /
     // "volume mute", "brightness up" / "brightness down", "notifications",
-    // "switcher next" / "switcher previous" (Alt+Tab).
+    // "quicksettings" (Win+A), "switcher next" / "switcher previous" (Alt+Tab).
     Connections {
         target: Shell
         function onCommand(name) {
@@ -55,6 +56,7 @@ ShellRoot {
                 osd.showBrightness()
                 break
             case "notifications": notificationCenter.toggle(); break
+            case "quicksettings": quickSettings.toggle(); break
             case "switcher": switcher.step(argument === "previous" ? -1 : 1); break
             }
         }
@@ -69,6 +71,7 @@ ShellRoot {
             launcherPopup: launcher
             menuPopup: systemMenu
             notificationsPopup: notificationCenter
+            quickSettingsPopup: quickSettings
         }
     }
 }

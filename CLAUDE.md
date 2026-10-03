@@ -39,6 +39,11 @@ plainly why you recommend something else.
   try live first: sign-in, the startup runner, the watchdog, Winlogon.
   It is usually shut down; ask before starting it, and don't sign it out
   or restart it unasked (no auto sign-in).
+- Claude's own shells on the host run under the Claude desktop app and
+  their registry writes to HKCU land in a virtualised view that Visor and
+  Windows never see (reads are suspect too). A registry change for a test
+  goes through a scheduled task in Ryan's session, or Ryan runs it. File
+  writes are unaffected.
 - Update `README.md`, `docs/design.md`, `docs/phase0-compat.md` and
   `src/bar/README.md` with every feature.
 

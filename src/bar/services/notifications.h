@@ -41,6 +41,10 @@ class Notifications : public QAbstractListModel
     Q_PROPERTY(QString access READ access NOTIFY stateChanged)
     Q_PROPERTY(int count READ count NOTIFY changed)
     Q_PROPERTY(int unread READ unread NOTIFY changed)
+    // Windows' Do not disturb: toasts go straight to the history, with no
+    // pop-up. The setting Settings > Notifications toggles, read and written
+    // in both modes, and followed when Windows changes it.
+    Q_PROPERTY(bool doNotDisturb READ doNotDisturb WRITE setDoNotDisturb NOTIFY doNotDisturbChanged)
 
 public:
     enum Role {
@@ -71,6 +75,8 @@ public:
     QString access() const { return m_access; }
     int count() const { return int(m_items.size()); }
     int unread() const;
+    bool doNotDisturb() const { return m_doNotDisturb; }
+    void setDoNotDisturb(bool on);
 
     int rowCount(const QModelIndex &parent = {}) const override;
     QVariant data(const QModelIndex &index, int role) const override;
@@ -86,6 +92,7 @@ public:
 signals:
     void stateChanged();
     void changed();
+    void doNotDisturbChanged();
     // A notification that arrived while running (not the backlog at start):
     // {id, app, appId, icon, title, body, time}.
     void arrived(const QVariantMap &notification);
@@ -95,6 +102,7 @@ private:
     friend struct NotificationsBridge;
 
     void updateMode();
+    void readDoNotDisturb();
     void start();
     void stop();
     void accessDecided(int status);
@@ -106,6 +114,7 @@ private:
     std::unique_ptr<Impl> d;
     QList<Item> m_items;
     QString m_access;
+    bool m_doNotDisturb = false;
     quint32 m_lastRead = 0;   // markRead()'s high-water mark, saved
     quint32 m_highest = 0;    // highest id seen by this instance
     bool m_primed = false;    // the first list has been read (it's the backlog)

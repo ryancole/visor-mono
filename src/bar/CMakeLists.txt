@@ -11,6 +11,7 @@ qt_add_executable(visor WIN32
     services/shelllink.h services/shelllink.cpp
     services/windowicons.h services/windowicons.cpp
     services/appindex.h services/appindex.cpp
+    services/registrywatch.h services/registrywatch.cpp
     ../common/launch.h ../common/launch.cpp
     ../common/log.h ../common/log.cpp
     ../common/theme.h ../common/theme.cpp
@@ -44,6 +45,12 @@ qt_add_qml_module(visor
         services/themes.h services/themes.cpp
         services/brightness.h services/brightness.cpp
         services/notifications.h services/notifications.cpp
+        services/network.h services/network.cpp
+        services/battery.h services/battery.cpp
+        services/radios.h services/radios.cpp
+        services/inputlanguage.h services/inputlanguage.cpp
+        services/updates.h services/updates.cpp
+        services/privacy.h services/privacy.cpp
 )
 
 # services/ is listed too: the generated QML type registration includes

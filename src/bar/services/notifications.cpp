@@ -13,6 +13,7 @@
 #include "services/notifications.h"
 
 #include "services/appindex.h"
+#include "services/registrywatch.h"
 #include "services/shelllink.h"
 
 #include <QDebug>
@@ -101,6 +102,16 @@ constexpr wchar_t kPlatformChannel[] = L"Microsoft-Windows-PushNotification-Plat
 // 3153: a toast was delivered; 3055: toasts were cleared.
 constexpr wchar_t kPlatformQuery[] = L"*[System[(EventID=3153 or EventID=3055)]]";
 
+// Do not disturb is this value at 0 (Settings > Notifications writes it).
+constexpr wchar_t kNotificationSettings[] = L"Software\\Microsoft\\Windows\\CurrentVersion\\Notifications\\Settings";
+const QString kToastsEnabled = QStringLiteral("NOC_GLOBAL_SETTING_TOASTS_ENABLED");
+
+QSettings notificationSettings()
+{
+    return QSettings(QStringLiteral("HKEY_CURRENT_USER\\") + QString::fromWCharArray(kNotificationSettings),
+                     QSettings::NativeFormat);
+}
+
 DWORD WINAPI onPlatformEvent(EVT_SUBSCRIBE_NOTIFY_ACTION action, PVOID context, EVT_HANDLE)
 {
     if (action == EvtSubscribeActionDeliver)
@@ -117,6 +128,7 @@ struct Notifications::Impl
     wunm::UserNotificationListener::NotificationChanged_revoker changedToken;
     EVT_HANDLE subscription = nullptr;
     bool started = false;
+    std::unique_ptr<RegistryWatch> doNotDisturb;
 
     void unsubscribe()
     {
@@ -132,6 +144,9 @@ Notifications::Notifications(QObject *parent)
 {
     d->bridge->target = this;
     m_lastRead = store().value(QStringLiteral("lastRead")).toUInt();
+    d->doNotDisturb = std::make_unique<RegistryWatch>(RegistryWatch::CurrentUser, kNotificationSettings, false,
+                                                      [this] { readDoNotDisturb(); });
+    readDoNotDisturb();
 
     // A delivery logs several events; one read after the last.
     m_refreshTimer.setSingleShot(true);
@@ -422,4 +437,20 @@ void Notifications::markRead()
     if (!m_items.isEmpty())
         emit dataChanged(index(0), index(int(m_items.size()) - 1), {UnreadRole});
     emit changed();
+}
+
+void Notifications::readDoNotDisturb()
+{
+    const bool on = notificationSettings().value(kToastsEnabled, 1).toInt() == 0;
+    if (on == m_doNotDisturb)
+        return;
+    m_doNotDisturb = on;
+    qInfo() << "notifications: do not disturb" << (on ? "on" : "off");
+    emit doNotDisturbChanged();
+}
+
+void Notifications::setDoNotDisturb(bool on)
+{
+    notificationSettings().setValue(kToastsEnabled, on ? 0 : 1);
+    readDoNotDisturb();
 }

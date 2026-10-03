@@ -5,6 +5,7 @@ import Visor
 // under the bar's bell or on Win+N (Windows' key for it). Up/Down pick,
 // Delete dismisses one, Esc closes; "Clear all" does what Windows' does.
 // Opening it marks everything read, which is what the bell's number counts.
+// The moon is Windows' Do not disturb (toasts go straight to the history).
 // Replace mode only: under Explorer, Windows has the real one.
 PopupWindow {
     id: center
@@ -53,9 +54,35 @@ PopupWindow {
                 font.weight: Font.DemiBold
             }
 
+            Rectangle {
+                id: dnd
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                width: 28
+                height: 24
+                radius: 6
+                color: Notifications.doNotDisturb ? Theme.accent : dndMouse.containsMouse ? Theme.hover : "transparent"
+
+                Icon {
+                    anchors.centerIn: parent
+                    glyph: "\uE708" // QuietHours
+                    color: Notifications.doNotDisturb ? Theme.background : Theme.text
+                    font.pixelSize: 15
+                }
+
+                MouseArea {
+                    id: dndMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: Notifications.doNotDisturb = !Notifications.doNotDisturb
+                }
+            }
+
             Label {
                 visible: Notifications.count > 0
-                anchors.right: parent.right
+                anchors.right: dnd.left
+                anchors.rightMargin: 12
                 anchors.verticalCenter: parent.verticalCenter
                 text: "Clear all"
                 color: clearMouse.containsMouse ? Theme.text : Theme.accent

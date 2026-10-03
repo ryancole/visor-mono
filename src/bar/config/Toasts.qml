@@ -25,6 +25,8 @@ OsdWindow {
     Connections {
         target: Notifications
         function onArrived(n) {
+            if (Notifications.doNotDisturb)
+                return // straight to the history, as Windows does
             pending.append({ nid: n.id, app: n.app, icon: n.icon, title: n.title, body: n.body })
             while (pending.count > toasts.maxShown)
                 pending.remove(0)

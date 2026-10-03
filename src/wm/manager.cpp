@@ -1143,8 +1143,8 @@ bool WindowManager::leftToWindows(const Binding &b) const
     if (b.release || b.modifiers == 0)
         return true;
     // Windows' keys for what Visor leaves to Windows under Explorer: search,
-    // the power-user menu, Run, the Notification Center, the Alt+Tab
-    // switcher, and its own virtual desktops. Win+arrows are not here: Snap
+    // the power-user menu, Run, the Notification Center, Quick Settings, the
+    // Alt+Tab switcher, and its own virtual desktops. Win+arrows are not here: Snap
     // would pull a window out of its tile, so with tiling on they move
     // focus and swap, as in Omarchy. Win+W/V/F/K/E are Explorer's too, but
     // the hook takes them for the tiling bindings, as it does without
@@ -1159,6 +1159,7 @@ bool WindowManager::leftToWindows(const Binding &b) const
         {MOD_WIN, 'X'},
         {MOD_WIN, 'R'},
         {MOD_WIN, 'N'},
+        {MOD_WIN, 'A'},
         {MOD_ALT, VK_TAB},
         {MOD_ALT | MOD_SHIFT, VK_TAB},
         {MOD_WIN | MOD_CONTROL, 'D'},
