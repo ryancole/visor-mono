@@ -434,6 +434,11 @@ void parseInto(Config &config, ParseState &state, const QString &text, const QSt
             ok = parseInt(value, &force) && force >= 0 && force <= 2;
             if (ok)
                 config.dwindle.forceSplit = force;
+        } else if (key == QLatin1String("dwindle:split_width_multiplier")) {
+            const double multiplier = value.toDouble(&ok);
+            ok = ok && multiplier > 0;
+            if (ok)
+                config.dwindle.splitWidthMultiplier = multiplier;
         } else if (key.startsWith(QLatin1String("bind"))) {
             Binding binding;
             QString error;

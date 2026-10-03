@@ -227,7 +227,7 @@ Session work runs alongside Phases 2–3:
 - Logoff and shutdown: done. The desktop window agrees to `WM_QUERYENDSESSION` and on `WM_ENDSESSION` the shell tells Visor and visor-wm to quit and exits; `visor-session` sees `SM_SHUTTINGDOWN` and doesn't restart it. Multi-monitor and DPI changes: done in Phase 3d.
 - Explorer-as-file-manager polish.
 
-**Phase 3: window manager (`visor-wm`).** 3a (single-monitor dwindle tiling with gaps, float rules and borders), 3b (Hyprland-style key bindings) 3c (virtual desktops that follow Windows 11's conventions, and the `Workspaces` QML type) and 3d (multi-monitor moves, DPI-scaled gaps, apps with minimum sizes, desktops surviving restarts) are done. The multi-monitor behaviour is written but still needs testing on more than one monitor.
+**Phase 3: window manager (`visor-wm`).** 3a (single-monitor dwindle tiling with gaps, float rules and borders), 3b (Hyprland-style key bindings) 3c (virtual desktops that follow Windows 11's conventions, and the `Workspaces` QML type) and 3d (multi-monitor moves, DPI-scaled gaps, apps with minimum sizes, desktops surviving restarts) are done. The multi-monitor behaviour is written but still needs testing on more than one monitor. Later: Hyprland's `dwindle:split_width_multiplier`, set to 0.75 in the default `wm.conf`, because with Hyprland's 1.0 the right half of a 21:9 screen is wider than tall and the third window lands beside the second as a narrow column; Windows has no tiling convention to follow here, but its Snap layouts offer the half-and-two-quarters arrangement this gives.
 - Tiling layouts and workspaces 1–9.
 - A key-binding config.
 - A `Workspaces` QML type in Visor.

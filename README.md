@@ -160,7 +160,7 @@ All of it is event-driven (network status events, power-setting notifications, r
 
 `visor-wm` tiles windows the way Hyprland does in Omarchy. visor-shell starts it and restarts it if it crashes: always in replace mode, and under Explorer when tiling is on (see [Hosted mode](#hosted-mode)). It can also be run by hand (`visor-wm.exe`; `--mode auto`, the default, sees whether Explorer is the shell). It has no window, so stop it from Task Manager; your windows stay where they are.
 
-- **Dwindle layout:** each new window splits the focused one, side by side when the space is wider than tall, otherwise one above the other. Closing a window gives its space back.
+- **Dwindle layout:** each new window splits the focused one, side by side when the space is clearly wider than tall (`split_width_multiplier`, 0.75 by default, so on a 21:9 screen the third window goes under the second, not beside it), otherwise one above the other. Closing a window gives its space back.
 - **What tiles:** normal resizable app windows. Dialogs, fixed-size, always-on-top and fullscreen windows float, and so do windows of elevated apps (such as Task Manager), because Windows won't let a normal app move them.
 - **Maximise and minimise still work:** a maximised window keeps its tile and goes back into it when restored. A minimised window leaves the layout until it comes back.
 - **Dragging** a tiled window snaps it back into its tile, or into the layout of the monitor it was dropped on.

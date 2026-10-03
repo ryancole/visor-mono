@@ -71,7 +71,7 @@ struct Binding
 //   section { key = value }     the same as section:key = value
 //   general:gaps_in, gaps_out, border_size, col.active_border, col.inactive_border
 //     (colours as rgb(rrggbb), rgba(rrggbbaa), 0xaarrggbb, or accent)
-//   dwindle:default_split_ratio, preserve_split, force_split
+//   dwindle:default_split_ratio, preserve_split, force_split, split_width_multiplier
 //   windowrule = float|tile, class:<regex>, title:<regex>, exe:<regex>
 //   bind, bindd, binde, ... (see Binding)
 // Unknown keys are reported, not fatal.

@@ -90,7 +90,7 @@ void DwindleLayout::insert(Window window, Window target, const Rect &area, const
     auto old = std::make_unique<Node>();
     old->window = split->window;
     split->window = 0;
-    split->sideBySide = split->box.width() > split->box.height();
+    split->sideBySide = options.sideBySide(split->box);
     split->ratio = options.splitRatio;
 
     bool newFirst = false;
@@ -198,7 +198,7 @@ void DwindleLayout::computeBoxes(Node *node, const Rect &box, const Options &opt
     if (node->isLeaf())
         return;
     if (!options.preserveSplit)
-        node->sideBySide = box.width() > box.height();
+        node->sideBySide = options.sideBySide(box);
 
     const double ratio = std::clamp(node->ratio, 0.1, 1.9);
     Rect a = box;

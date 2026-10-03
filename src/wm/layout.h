@@ -19,8 +19,8 @@ struct Rect
 
 // Hyprland's dwindle layout: a binary tree whose leaves are windows. A new
 // window splits the focused one; the split is side by side when the space is
-// wider than tall, otherwise one above the other, so the screen fills in a
-// spiral. Closing a window gives its space to its sibling.
+// wider than tall (scaled by split_width_multiplier), otherwise one above the
+// other, so the screen fills in a spiral. Closing a window gives its space to its sibling.
 class DwindleLayout
 {
 public:
@@ -38,6 +38,12 @@ public:
         // dwindle:force_split. 0: the new window goes on the side of the
         // split the cursor is on; 1: always left/top; 2: always right/bottom.
         int forceSplit = 2;
+        // dwindle:split_width_multiplier. A split is side by side when
+        // width * this > height, as in Hyprland; below 1.0 a space has to
+        // be wider before it splits side by side.
+        double splitWidthMultiplier = 1.0;
+
+        bool sideBySide(const Rect &box) const { return box.width() * splitWidthMultiplier > box.height(); }
     };
 
     struct Placement
