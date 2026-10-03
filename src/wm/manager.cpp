@@ -89,7 +89,9 @@ QString stateFile()
 
 // `tile`, grown to at least `minimum` and kept inside `area`. It grows away
 // from the middle of the area (a left-hand tile grows rightwards), so it
-// covers its neighbour rather than leaving the screen.
+// covers its neighbour rather than leaving the screen. The layout already
+// sizes tiles for known minimums, so this is for a window whose minimum
+// isn't learnt yet, or a monitor too small for every window's.
 Rect fit(const Rect &tile, const QSize &minimum, const Rect &area)
 {
     Rect r = tile;
@@ -622,7 +624,7 @@ void WindowManager::arrange(const QString &monitor)
     const Rect inside{mon->work.left + gapsOut, mon->work.top + gapsOut, mon->work.right - gapsOut,
                       mon->work.bottom - gapsOut};
     const QList<DwindleLayout::Placement> placements =
-        workspace(monitor).layout.arrange(mon->work, gapsIn, gapsOut, m_config.dwindle);
+        workspace(monitor).layout.arrange(mon->work, gapsIn, gapsOut, m_config.dwindle, m_minimumSize);
     for (const DwindleLayout::Placement &p : placements) {
         m_tiles.insert(p.window, p.rect);
         if (!win::exists(p.window) || win::isMinimized(p.window) || win::isMaximized(p.window))
@@ -1145,8 +1147,8 @@ bool WindowManager::leftToWindows(const Binding &b) const
     // Windows' keys for what Visor leaves to Windows under Explorer: search,
     // the power-user menu, Run, the Notification Center, Quick Settings, the
     // Alt+Tab switcher, and its own virtual desktops. Win+arrows are not here: Snap
-    // would pull a window out of its tile, so with tiling on they move
-    // focus and swap, as in Omarchy. Win+W/V/F/K/E are Explorer's too, but
+    // would pull a window out of its tile, so with tiling on they move it
+    // within the layout instead, and swap with Shift as in Omarchy. Win+W/V/F/K/E are Explorer's too, but
     // the hook takes them for the tiling bindings, as it does without
     // Explorer.
     struct Key
@@ -1255,6 +1257,8 @@ void WindowManager::dispatch(const Binding &binding)
         moveFocus(direction());
     } else if (d == QLatin1String("swapwindow")) {
         swapWindow(direction());
+    } else if (d == QLatin1String("movewindow")) {
+        moveWindow(direction());
     } else if (d == QLatin1String("togglesplit")) {
         toggleSplit();
     } else if (d == QLatin1String("resizeactive")) {
@@ -1373,27 +1377,8 @@ void WindowManager::swapWindow(Direction direction)
     const quintptr target = a == m_managed.end() ? 0 : neighbor(m_tiles.value(hwnd), direction, hwnd);
     const auto b = m_managed.find(target);
     if (!target || b == m_managed.end()) {
-        // Nothing to swap with that way: move it to the monitor there, as
-        // Win+Shift+Left/Right does in Windows (floating windows too).
-        const QString from = a == m_managed.end() ? monitorOf(hwnd) : a->monitor;
-        const QString to = monitorInDirection(from, direction);
-        if (to.isEmpty())
-            return;
-        if (a != m_managed.end()) {
-            moveToMonitor(hwnd, to);
-            workspace(to).lastFocused = hwnd;
-        } else {
-            // Same place relative to the work area, made to fit.
-            const Rect src = m_monitors.value(from).work;
-            const Rect dst = m_monitors.value(to).work;
-            const Rect f = win::frameRect(hwnd);
-            const int w = std::min(f.width(), dst.width());
-            const int h = std::min(f.height(), dst.height());
-            const int left = dst.left + int(qint64(f.left - src.left) * (dst.width() - w) / std::max(1, src.width() - f.width()));
-            const int top = dst.top + int(qint64(f.top - src.top) * (dst.height() - h) / std::max(1, src.height() - f.height()));
-            win::moveTo(hwnd, fit({left, top, left + w, top + h}, {}, dst));
-        }
-        settleSoon(); // apps resize themselves when they change monitor DPI
+        // Nothing to swap with that way.
+        moveToMonitorInDirection(hwnd, direction);
         return;
     }
 
@@ -1412,6 +1397,97 @@ void WindowManager::swapWindow(Direction direction)
         arrange(to);
     }
     arrange(from);
+}
+
+void WindowManager::moveWindow(Direction direction)
+{
+    const quintptr hwnd = win::foreground();
+    if (!hwnd || win::classify(hwnd, m_config) == win::Kind::Ignore)
+        return;
+    const auto a = m_managed.find(hwnd);
+    const bool vertical = direction == Direction::Up || direction == Direction::Down;
+    // Out of its row into a column of its own first, then on into the next
+    // row with the next press.
+    if (a != m_managed.end()
+        && workspaceOf(*a).layout.breakOut(hwnd, vertical,
+                                           direction == Direction::Down || direction == Direction::Right)) {
+        arrange(a->monitor);
+        return;
+    }
+    const Rect tile = a == m_managed.end() ? Rect{} : m_tiles.value(hwnd);
+    const quintptr target = a == m_managed.end() ? 0 : neighbor(tile, direction, hwnd);
+    const auto b = m_managed.find(target);
+    if (!target || b == m_managed.end()) {
+        // Nothing that way: into the row (or column) at that end of what's
+        // beside it, as Snap makes a half a quarter, else the monitor there,
+        // as Hyprland's movewindow does.
+        if (a != m_managed.end()) {
+            const int x = direction == Direction::Left    ? tile.left + 1
+                          : direction == Direction::Right ? tile.right - 1
+                                                          : (tile.left + tile.right) / 2;
+            const int y = direction == Direction::Up     ? tile.top + 1
+                          : direction == Direction::Down ? tile.bottom - 1
+                                                         : (tile.top + tile.bottom) / 2;
+            if (workspaceOf(*a).layout.moveToEnd(hwnd, vertical, m_monitors.value(a->monitor).work, m_config.dwindle,
+                                                  x, y)) {
+                arrange(a->monitor);
+                return;
+            }
+        }
+        moveToMonitorInDirection(hwnd, direction);
+        return;
+    }
+
+    // Just past the middle of the edge it moves across, as in Hyprland: that
+    // decides which side of the target it lands on.
+    const int midX = (tile.left + tile.right) / 2;
+    const int midY = (tile.top + tile.bottom) / 2;
+    const int x = direction == Direction::Left ? tile.left - 1 : direction == Direction::Right ? tile.right : midX;
+    const int y = direction == Direction::Up ? tile.top - 1 : direction == Direction::Down ? tile.bottom : midY;
+
+    const QString from = a->monitor;
+    const QString to = b->monitor;
+    if (from == to) {
+        workspace(from).layout.move(hwnd, target, m_monitors.value(from).work, m_config.dwindle, x, y);
+    } else {
+        Workspace &old = workspaceOf(*a);
+        old.layout.remove(hwnd);
+        if (old.lastFocused == hwnd)
+            old.lastFocused = 0;
+        DwindleLayout::Options atPoint = m_config.dwindle;
+        atPoint.forceSplit = 0;
+        workspace(to).layout.insert(hwnd, target, m_monitors.value(to).work, atPoint, x, y);
+        workspace(to).lastFocused = hwnd;
+        a->monitor = to;
+        arrange(to);
+        settleSoon(); // apps resize themselves when they change monitor DPI
+    }
+    arrange(from);
+}
+
+void WindowManager::moveToMonitorInDirection(quintptr hwnd, Direction direction)
+{
+    // As Win+Shift+Left/Right does in Windows (floating windows too).
+    const auto a = m_managed.find(hwnd);
+    const QString from = a == m_managed.end() ? monitorOf(hwnd) : a->monitor;
+    const QString to = monitorInDirection(from, direction);
+    if (to.isEmpty())
+        return;
+    if (a != m_managed.end()) {
+        moveToMonitor(hwnd, to);
+        workspace(to).lastFocused = hwnd;
+    } else {
+        // Same place relative to the work area, made to fit.
+        const Rect src = m_monitors.value(from).work;
+        const Rect dst = m_monitors.value(to).work;
+        const Rect f = win::frameRect(hwnd);
+        const int w = std::min(f.width(), dst.width());
+        const int h = std::min(f.height(), dst.height());
+        const int left = dst.left + int(qint64(f.left - src.left) * (dst.width() - w) / std::max(1, src.width() - f.width()));
+        const int top = dst.top + int(qint64(f.top - src.top) * (dst.height() - h) / std::max(1, src.height() - f.height()));
+        win::moveTo(hwnd, fit({left, top, left + w, top + h}, {}, dst));
+    }
+    settleSoon(); // apps resize themselves when they change monitor DPI
 }
 
 void WindowManager::toggleSplit()

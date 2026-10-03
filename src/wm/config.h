@@ -41,6 +41,7 @@ struct WindowRule
 //                           launcher, menu, keys, run)
 //   fullscreen [0|1]       (0: whole monitor, over the bar; 1: maximise)
 //   movefocus l|r|u|d      swapwindow l|r|u|d  togglesplit
+//   movewindow l|r|u|d     (out of its place, into the neighbour's)
 //   resizeactive <dx> <dy> (pixels; grows/shrinks the window's split)
 // Desktops (Windows 11's virtual desktops; Hyprland calls them workspaces):
 //   workspace new|e+1|e-1|N            create / next / previous / Nth

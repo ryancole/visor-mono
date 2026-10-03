@@ -143,6 +143,96 @@ void DwindleLayout::swap(Window a, Window b)
         std::swap(na->window, nb->window);
 }
 
+void DwindleLayout::move(Window window, Window target, const Rect &area, const Options &options, int x, int y)
+{
+    Node *leaf = find(m_root.get(), window);
+    Node *other = find(m_root.get(), target);
+    if (!leaf || !other || leaf == other)
+        return;
+    if (leaf->parent == other->parent) {
+        std::swap(leaf->window, other->window);
+        return;
+    }
+    remove(window);
+    // The point decides the side, as the cursor does for force_split 0.
+    Options atPoint = options;
+    atPoint.forceSplit = 0;
+    insert(window, target, area, atPoint, x, y);
+}
+
+bool DwindleLayout::moveToEnd(Window window, bool vertical, const Rect &area, const Options &options, int x, int y)
+{
+    Node *leaf = find(m_root.get(), window);
+    if (!leaf || !leaf->parent)
+        return false;
+    // Moving up or down needs a side-by-side split, whose other side has
+    // rows to move into (a single window there would get the same split back).
+    Node *parent = leaf->parent;
+    const Node *sibling = parent->first.get() == leaf ? parent->second.get() : parent->first.get();
+    if (parent->sideBySide != vertical || sibling->isLeaf())
+        return false;
+
+    remove(window);
+    computeBoxes(m_root.get(), area, options);
+    Node *target = leafAt(m_root.get(), x, y);
+    Options atPoint = options;
+    atPoint.forceSplit = 0;
+    insert(window, target ? target->window : 0, area, atPoint, x, y);
+    return true;
+}
+
+bool DwindleLayout::breakOut(Window window, bool vertical, bool forward)
+{
+    // Moving down: the window's row is a side-by-side split, the top half of
+    // a stacked one.
+    Node *leaf = find(m_root.get(), window);
+    Node *row = leaf ? leaf->parent : nullptr;
+    Node *rows = row ? row->parent : nullptr;
+    if (!rows || row->sideBySide != vertical || rows->sideBySide == vertical
+        || (rows->first.get() == row) != forward)
+        return false;
+
+    const bool leafFirst = row->first.get() == leaf;
+    const int size = vertical ? leaf->box.width() : leaf->box.height();
+    const int total = vertical ? rows->box.width() : rows->box.height();
+    remove(window); // `row` goes, its other window takes its place in `rows`
+
+    // A new split in `rows`' place: the window on one side, the rows on the other.
+    auto split = std::make_unique<Node>();
+    split->sideBySide = vertical;
+    const double share = total > 0 ? double(leafFirst ? size : total - size) / total : 0.5;
+    split->ratio = std::clamp(2 * share, 0.1, 1.9);
+    auto moved = std::make_unique<Node>();
+    moved->window = window;
+    moved->parent = split.get();
+
+    Node *above = rows->parent;
+    std::unique_ptr<Node> &slot = !above ? m_root : above->first.get() == rows ? above->first : above->second;
+    std::unique_ptr<Node> old = std::move(slot);
+    old->parent = split.get();
+    split->parent = above;
+    if (leafFirst) {
+        split->first = std::move(moved);
+        split->second = std::move(old);
+    } else {
+        split->first = std::move(old);
+        split->second = std::move(moved);
+    }
+    slot = std::move(split);
+    return true;
+}
+
+DwindleLayout::Node *DwindleLayout::leafAt(Node *node, int x, int y) const
+{
+    if (!node || x < node->box.left || x >= node->box.right || y < node->box.top || y >= node->box.bottom)
+        return nullptr;
+    if (node->isLeaf())
+        return node;
+    if (Node *found = leafAt(node->first.get(), x, y))
+        return found;
+    return leafAt(node->second.get(), x, y);
+}
+
 void DwindleLayout::replace(Window window, Window with)
 {
     if (Node *node = find(m_root.get(), window))
@@ -179,7 +269,10 @@ bool DwindleLayout::resize(Window window, int dx, int dy)
         const int total = sideBySide ? split->box.width() : split->box.height();
         if (total <= 0)
             return;
-        const double firstSize = total * std::clamp(split->ratio, 0.1, 1.9) / 2;
+        // From where the divider is, which a minimum size may have moved
+        // off the ratio.
+        const Rect &firstBox = split->first->box;
+        const double firstSize = sideBySide ? firstBox.width() : firstBox.height();
         const bool inFirst = split->first.get() == child;
         const double newFirst = firstSize + (inFirst ? delta : -delta);
         split->ratio = std::clamp(2 * newFirst / total, 0.1, 1.9);
@@ -201,24 +294,51 @@ void DwindleLayout::computeBoxes(Node *node, const Rect &box, const Options &opt
         node->sideBySide = options.sideBySide(box);
 
     const double ratio = std::clamp(node->ratio, 0.1, 1.9);
+    const int total = node->sideBySide ? box.width() : box.height();
+    int firstSize = int(std::lround(total * ratio / 2));
+    // Move the divider so neither side is below its minimum, when both fit.
+    const QSize minFirst = minimumOf(node->first.get());
+    const QSize minSecond = minimumOf(node->second.get());
+    const int needFirst = node->sideBySide ? minFirst.width() : minFirst.height();
+    const int needSecond = node->sideBySide ? minSecond.width() : minSecond.height();
+    if (needFirst + needSecond <= total)
+        firstSize = std::clamp(firstSize, needFirst, total - needSecond);
+
     Rect a = box;
     Rect b = box;
     if (node->sideBySide) {
-        const int split = box.left + int(std::lround(box.width() * ratio / 2));
-        a.right = split;
-        b.left = split;
+        a.right = b.left = box.left + firstSize;
     } else {
-        const int split = box.top + int(std::lround(box.height() * ratio / 2));
-        a.bottom = split;
-        b.top = split;
+        a.bottom = b.top = box.top + firstSize;
     }
     computeBoxes(node->first.get(), a, options);
     computeBoxes(node->second.get(), b, options);
 }
 
-QList<DwindleLayout::Placement> DwindleLayout::arrange(const Rect &area, int gapsIn, int gapsOut,
-                                                       const Options &options)
+// The smallest box (gaps included) `node` fits in: a window's minimum frame
+// plus its gaps; a split needs both children's along its direction and the
+// larger of the two across it.
+QSize DwindleLayout::minimumOf(const Node *node) const
 {
+    if (!node)
+        return {0, 0};
+    if (node->isLeaf()) {
+        const QSize m = m_minimums.value(node->window, QSize(0, 0));
+        return {m.width() > 0 ? m.width() + 2 * m_gapsIn : 0, m.height() > 0 ? m.height() + 2 * m_gapsIn : 0};
+    }
+    const QSize a = minimumOf(node->first.get());
+    const QSize b = minimumOf(node->second.get());
+    if (node->sideBySide)
+        return {a.width() + b.width(), std::max(a.height(), b.height())};
+    return {std::max(a.width(), b.width()), a.height() + b.height()};
+}
+
+QList<DwindleLayout::Placement> DwindleLayout::arrange(const Rect &area, int gapsIn, int gapsOut,
+                                                       const Options &options, const QHash<Window, QSize> &minimums)
+{
+    m_minimums = minimums;
+    m_gapsIn = gapsIn;
+
     // Shrinking the area by (out - in) and then every window by `in` leaves
     // `out` at the edges and 2 * `in` between windows, as Hyprland does.
     const int edge = gapsOut - gapsIn;

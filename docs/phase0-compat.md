@@ -79,6 +79,9 @@ Phase 8, same build. Tested with `pwsh etc/vm/deploy.ps1 -Hosted` after Ctrl+Alt
 | Win+N is Windows' | Win+N | ✅ | Windows' Notification Center, and it isn't tiled |
 | Windows desktops | Win+Ctrl+D, open Notepad, Win+Ctrl+Left | ✅ | The new desktop is empty and the bar shows no pills; Notepad tiles alone there ("on Windows desktop 957c…", "desktop 2"); back on the first, the Notepad + Terminal layout is as it was |
 | Win+arrows move focus | Win+Right from Notepad | ✅ | "SUPER+right -> movefocus r"; the terminal gets the accent border and the caret |
+| Win+arrows move the window | Win+arrows on PowerShell among Edge, Claude and Battle.net | ✅ | "SUPER+left -> movewindow l" and the rest in `wm.log`; Ryan moved it around all four ways and it did what he expected |
+| Win+Up on a full-height column | PowerShell as the right column beside Claude over Battle.net | ✅ | PowerShell beside Claude in the top row, Battle.net across the bottom row |
+| Win+Down from the top row | PowerShell beside Claude, Battle.net across the bottom | ✅ | The first press makes PowerShell the full-height right column again, the second puts it beside Battle.net in the bottom row; Win+Up goes back the same way |
 | visor-wm crash | `Stop-Process visor-wm` | ✅ | visor-shell restarted it a second later; it adopted the two windows into the same tiles |
 | visor-shell crash | `Stop-Process visor-shell` | ✅ | See "Crash" above |
 | Ctrl+Alt+Q | | ✅ | visor-shell, Visor, visor-wm and visor-session all exit; auto-hide off again and the record removed |
@@ -94,6 +97,7 @@ Checked live on Ryan's desktop (replace mode, build 26300, 3440x1440, no battery
 | Centre indicators | Look at the bar | ✅ | Only the clock: one layout, no restart pending, nothing using the mic, so nothing shows, as intended |
 | Quick Settings | Win+A, or click the cluster | ✅ | `wm.log` "SUPER+A -> visor quicksettings"; the popup under the cluster: Wi-Fi and Bluetooth buttons (both radios present, off), the volume slider at 50 with "Speakers (HyperX Cloud MIX 2)", and the "Ethernet" line. No brightness slider (desktop), no battery tile |
 | Do not disturb | The moon in the Notification Center; the setting flipped from a script in the session | ✅ | `visor.log`: "RegistryWatch: change under ...Notifications\\Settings", "do not disturb on", the bell becomes a moon; off again three seconds later. (A write from Claude's own shell never reached the real registry: see CLAUDE.md) |
+| Minimum sizes in the layout | Five windows on one monitor, Discord and Claude stacked in a quarter | | Expect the stack to take ~910 px of height and Battle.net below to shrink, no overlap, within a moment of Discord opening |
 | Clock format and click | Look at the bar; click the clock | ✅ | "Fri 2 Oct   10:52 PM" (en-US, `h:mm tt`); a click opened the Date and Time dialog, floating, without Explorer |
 | Keyboard layout | Needs a second layout | | Not tested: one layout installed |
 | Restart required | Needs a pending Windows Update | | Not tested |

@@ -280,7 +280,8 @@ bool parseBinding(const QString &flags, const QString &value, Binding *binding, 
         ok = true;
     } else if (d == QLatin1String("fullscreen")) {
         ok = arg.isEmpty() || arg == QLatin1String("0") || arg == QLatin1String("1");
-    } else if (d == QLatin1String("movefocus") || d == QLatin1String("swapwindow")) {
+    } else if (d == QLatin1String("movefocus") || d == QLatin1String("swapwindow")
+               || d == QLatin1String("movewindow")) {
         ok = isDirection(arg);
     } else if (d == QLatin1String("resizeactive")) {
         const QStringList xy = arg.split(QLatin1Char(' '), Qt::SkipEmptyParts);

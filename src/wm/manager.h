@@ -178,6 +178,9 @@ private:
     void fullscreen(bool maximizeOnly);
     void moveFocus(Direction direction);
     void swapWindow(Direction direction);
+    void moveWindow(Direction direction);
+    // To the monitor that way, if there is one (tiled or floating).
+    void moveToMonitorInDirection(quintptr hwnd, Direction direction);
     void toggleSplit();
     void resizeActive(int dx, int dy);
     // The tiled window nearest to `from` in `direction` (any monitor) on the

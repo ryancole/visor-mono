@@ -166,14 +166,14 @@ All of it is event-driven (network status events, power-setting notifications, r
 - **Maximise and minimise still work:** a maximised window keeps its tile and goes back into it when restored. A minimised window leaves the layout until it comes back.
 - **Dragging** a tiled window snaps it back into its tile, or into the layout of the monitor it was dropped on.
 - **Borders:** the focused window gets `col.active_border` and the rest `col.inactive_border` (Windows 11 draws them 1 px wide). A colour can be `accent`: Windows' accent colour, followed as it changes (the default for the focused window; see [Themes](#themes)).
-- **Windows that won't shrink:** some apps have a minimum size (Windows Terminal stops at about 465 px wide). When a window ends up bigger than its tile, `visor-wm` remembers that size and gives the window that much room, kept on-screen, so it covers part of its neighbour instead of running off the edge. Resizing stops there too.
+- **Windows that won't shrink:** some apps have a minimum size (Windows Terminal stops at about 465 px wide, Discord at about 500 px tall). When a window ends up bigger than its tile, `visor-wm` remembers that size and moves the splits to make room, as Snap's divider stops at a snapped window's minimum: its neighbours get smaller instead of being covered, and resizing stops there too. Only when the screen can't hold every window's minimum does one cover part of its neighbour (kept on-screen, never off the edge).
 - **Multiple monitors:** each monitor has its own layout. New windows tile on the monitor they open on. Gaps are logical pixels, so they scale with each monitor's DPI, as in Hyprland. Focus and swapping cross monitors. Where there's no window to swap with, Super+Shift+arrows moves the window to the monitor in that direction, like Win+Shift+Left/Right in Windows (floating windows too). Windows on a monitor that's unplugged move to the primary one. *This part hasn't been tested with more than one monitor yet.*
 
 Config is `wm.conf`, a subset of `hyprland.conf`, and saving it applies it at once. It is looked up like Visor's config: `--config`, `%VISOR_WM_CONFIG%`, `~/.config/visor/wm.conf`, then [`src/bar/config/wm.conf`](src/bar/config/wm.conf) (debug builds), then `config/wm.conf` next to the exe. The default file documents every setting: gaps, border colours, the dwindle options, `source = <file>` includes and window rules such as `windowrule = float, exe:^notepad\.exe$`.
 
 ### Keys
 
-The default bindings follow Omarchy. They are all `bind` lines in `wm.conf`, in Hyprland's syntax (`bind = SUPER SHIFT, left, swapwindow, l`), so you can change them and save to apply.
+The default bindings follow Omarchy, except Super+arrows: Omarchy moves focus with them, but in Windows Win+arrows move the window (Snap) and Alt+Tab changes focus, so they run Hyprland's `movewindow` (`movefocus` is still there to bind). They are all `bind` lines in `wm.conf`, in Hyprland's syntax (`bind = SUPER SHIFT, left, swapwindow, l`), so you can change them and save to apply.
 
 | Keys | Action |
 | --- | --- |
@@ -190,13 +190,13 @@ The default bindings follow Omarchy. They are all `bind` lines in `wm.conf`, in 
 | Super+F | Fullscreen, covering the bar |
 | Super+Alt+F | Maximise, keeping the bar |
 | Super+J | Switch the window's split between side by side and stacked |
-| Super+arrows | Move focus |
+| Super+arrows | Move the window: out of its tile and in beside the window that way. With none that way, a window beside a stack moves into its top (or bottom) row, as Win+Up makes a snapped half a quarter; otherwise to the monitor that way. A window in a row that moves down (or up) out of it first becomes a full-height column beside the rows, and goes into the next row on the next press (left/right likewise with columns) |
 | Super+Shift+arrows | Swap the window with its neighbour |
 | Super+minus / equal | Narrower / wider (add Shift for shorter / taller) |
 
 Windows reserves some Win-key combinations even without Explorer (Win+arrows, Win+Shift+arrows, Win+Return, Win+=), so `visor-wm` catches those with a keyboard hook instead of a hotkey, as it does the bare Win press (`bindr = SUPER, SUPER_L, ...`: fires on release, if nothing else was pressed). One limit comes with that: they don't work while an app running as administrator has focus. Win+L always locks the screen.
 
-**Under Explorer** (hosted mode with tiling on) Windows keeps every key it acts on itself, and `visor-wm` skips those bindings: the bare Win press (Start), Win+S, Win+X, Win+R, Win+N, Win+A, Alt+Tab and Alt+Shift+Tab, the volume keys (any binding with no modifier), and the desktop keys (Win+Ctrl+D, F4, Left, Right, and the two movetoworkspace rows, since the desktops are Windows' there). `wm.log` lists them as "left to Windows", and the cheat sheet leaves them out. The rest binds as usual: the tiling keys, Super+Return, Super+E, Super+K, the theme key. Two notes on that. Win+arrows and Win+Shift+arrows are Snap in Windows, but Snap would pull a window out of its tile, so with tiling on they move focus and swap, as above (swapping with nothing to swap with moves the window to the next monitor, which is what Win+Shift+arrows do in Windows). And Super+W, V, F, K and E are Explorer's too (Widgets, clipboard history, Feedback Hub, Cast, Explorer); the keyboard hook takes them, so those Windows features lose their keys while `visor-wm` runs.
+**Under Explorer** (hosted mode with tiling on) Windows keeps every key it acts on itself, and `visor-wm` skips those bindings: the bare Win press (Start), Win+S, Win+X, Win+R, Win+N, Win+A, Alt+Tab and Alt+Shift+Tab, the volume keys (any binding with no modifier), and the desktop keys (Win+Ctrl+D, F4, Left, Right, and the two movetoworkspace rows, since the desktops are Windows' there). `wm.log` lists them as "left to Windows", and the cheat sheet leaves them out. The rest binds as usual: the tiling keys, Super+Return, Super+E, Super+K, the theme key. Two notes on that. Win+arrows and Win+Shift+arrows are Snap in Windows, but Snap would pull a window out of its tile, so with tiling on they move the window within the layout and swap it, as above (swapping with nothing to swap with moves the window to the next monitor, which is what Win+Shift+arrows do in Windows). And Super+W, V, F, K and E are Explorer's too (Widgets, clipboard history, Feedback Hub, Cast, Explorer); the keyboard hook takes them, so those Windows features lose their keys while `visor-wm` runs.
 
 ### Desktops
 
