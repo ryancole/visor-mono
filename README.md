@@ -1,12 +1,29 @@
 # visor
 
-A desktop for Windows built around Visor, a QML status bar. The goal is an
-Omarchy-style desktop: tiling, keyboard-driven, themeable. Native C++ and Qt,
-event-driven, small. It can run as a plain app under Explorer, or replace
+An [Omarchy](https://omarchy.org)-style desktop for Windows 11: tiling,
+keyboard-driven and themeable, built the Windows way. Native C++ and Qt,
+event-driven, small.
+
+![visor on a 21:9 monitor: the bar along the top, four windows tiled below it](docs/screenshot.png)
+
+visor follows Windows 11's conventions wherever Windows has one (its themes,
+accent colour, virtual desktops, Quick Settings, Win-key shortcuts) and
+borrows from Omarchy and Hyprland only where Windows has nothing, such as
+tiling and a status bar. It runs alongside Explorer, or replaces
 `explorer.exe` as the Windows shell.
 
-Status: **phase 10 (done)**: the rest of the bar, Omarchy's layout with Windows' indicators: [Quick Settings](#quick-settings-and-indicators) behind the network, battery and volume cluster (Win+A), the keyboard layout, Windows Update's restart badge, the microphone, camera and location indicators and Do not disturb, on top of phase 9's tiling under Explorer, so [hosted mode](#hosted-mode) gets `visor-wm` when you turn it on, with Windows keeping its own keys and virtual desktops, and a watchdog for the hosted shell, phase 8's [hosted mode](#hosted-mode), where Explorer stays the shell with its taskbar auto-hidden and everything that lives in Explorer keeps working, phase 7's Alt+Tab switcher with live previews, the programs Windows starts at sign-in, and clean sign-out, phase 6's notifications (toast pop-ups and a Notification Center in Visor, read from the notification platform that keeps running without Explorer) and on-screen display for the volume keys, phase 5's Windows themes, followed and switched by Visor (bar, wallpaper, dark/light mode, accent, window borders and the Terminal scheme in one go), phase 4's app launcher, power menu and key-binding cheat sheet in Visor, phase 3's Hyprland-style tiling, key bindings and Windows-style virtual desktops (`visor-wm`) and phase 2's desktop, wallpaper, task list and tray, app bars and work areas, fullscreen detection and Visor supervision. Phase 0 results (what breaks without Explorer) are in [docs/phase0-compat.md](docs/phase0-compat.md).
-See [docs/design.md](docs/design.md) for the architecture and plan.
+## Features
+
+- **A status bar in QML** ([Visor](src/bar/README.md)), with live reload: the desktops, the clock, the tray, and the taskbar's own indicators: network, battery, volume, keyboard layout, the restart badge and the microphone, camera and location lights.
+- **Tiling** ([`visor-wm`](#window-manager)): Hyprland's dwindle layout and key bindings, configured in a `hyprland.conf`-style file, with Windows 11's Snap behaviour where it fits.
+- **Virtual desktops** that work like Windows 11's ([Desktops](#desktops)).
+- **A launcher, a system menu and a key-binding cheat sheet** ([Launcher and menus](#launcher-and-menus)).
+- **Windows themes**, followed and switched by Visor: wallpaper, dark/light mode, accent colour, window borders and the Windows Terminal scheme in one go, with six Omarchy-style themes included ([Themes](#themes)).
+- **Without Explorer:** a desktop and wallpaper, the tray, toasts and a Notification Center, Quick Settings, the volume display, an Alt+Tab switcher with live previews, and the programs Windows starts at sign-in.
+
+## Status
+
+Every planned phase is done, and visor is the author's daily desktop in replace mode on a single 3440x1440 monitor. More than one monitor hasn't been tested yet. Replacing Explorer isn't something Windows supports on desktop editions, so some things need Explorer: UWP apps such as Settings and Calculator can't open in replace mode ([docs/phase0-compat.md](docs/phase0-compat.md) lists what works without Explorer). See [docs/design.md](docs/design.md) for the architecture and plan.
 
 | Program | Source | What it is |
 | --- | --- | --- |
@@ -15,81 +32,37 @@ See [docs/design.md](docs/design.md) for the architecture and plan.
 | `visor-shell.exe` | [`src/shell`](src/shell) | Shell services: desktop and wallpaper, the shell-ready signal, hotkeys, window (task) tracking, the notification area (`Shell_TrayWnd`), the app bar server, and starting and supervising Visor and visor-wm. Draws no UI of its own. Visor does that, over the link in [`src/common/linkprotocol.h`](src/common/linkprotocol.h). |
 | `visor-wm.exe` | [`src/wm`](src/wm) | The tiling window manager, in Hyprland's role: tiles app windows with the dwindle layout inside the space Visor's bar leaves, as the shell or under Explorer. Configured by a `hyprland.conf`-style `wm.conf`. See [Window manager](#window-manager). |
 
-## Safety first
+## Installing
 
-**Only install this in a VM** until it is proven. `etc/install.ps1` refuses to run on a physical machine.
+Build it first (see [Building](#building)); everything lands in `build/release/`. Copy that folder somewhere permanent, such as `%LOCALAPPDATA%\Programs\visor`, then pick a mode. Both are per-user and take effect at the next sign-in; `etc/uninstall.ps1` undoes either.
 
-On a real machine, use [hosted mode](#hosted-mode): `visor-shell --mode hosted` alongside Explorer, which is what `pwsh etc/build.ps1 -RunShell` runs (it asks the taskbar to auto-hide while it runs).
+- **Hosted mode** (the Windows-conventional one): Explorer stays the shell and visor runs beside it, with the taskbar auto-hidden. Everything that lives in Explorer keeps working. Add `-Tiling` for the window manager. See [Hosted mode](#hosted-mode).
+
+  ```powershell
+  pwsh etc/install.ps1 -Path "$env:LOCALAPPDATA\Programs\visor\visor-session.exe" -Hosted -Tiling -AllowPhysicalMachine
+  ```
+
+- **Replace mode:** visor is the shell (the per-user Winlogon `Shell` value; the machine-wide one is never touched), with Explorer as the fallback.
+
+  ```powershell
+  pwsh etc/install.ps1 -Path "$env:LOCALAPPDATA\Programs\visor\visor-session.exe" -AllowPhysicalMachine
+  ```
+
+`install.ps1` refuses to run on a physical machine without `-AllowPhysicalMachine`: try it in a VM first (see [Test VM](#test-vm)), and know the way back below before you sign out. To try it without installing anything, `pwsh etc/build.ps1 -RunShell` runs hosted mode until you press Ctrl+Alt+Q.
 
 ### Emergency recovery
 
 If sign-in lands on a black or broken desktop, try these in order:
 
 1. **Wait.** If `visor-shell` crashes 3 times within a minute, `visor-session` starts Explorer.
-2. **Sign out and back in holding Shift.** That session starts Explorer instead. Sign out with Ctrl+Alt+Del.
-3. **Use Task Manager.** Press Ctrl+Shift+Esc, choose **Run new task**, and enter `explorer.exe`. Enter `regedit` instead to edit the setting by hand.
-4. **Restore from the host:** `pwsh etc/vm/deploy.ps1 -Restore`. This removes the setting and starts Explorer in the VM. It works even when the VM's screen is black.
+2. **Press Ctrl+Alt+Q.** It quits to Explorer.
+3. **Sign out and back in holding Shift.** That session starts Explorer instead. Sign out with Ctrl+Alt+Del.
+4. **Use Task Manager.** Press Ctrl+Shift+Esc, choose **Run new task**, and enter `explorer.exe`. Enter `regedit` instead to edit the setting by hand.
 5. **Use the safe-mode file.** Create `%LOCALAPPDATA%\visor-shell\safe-mode` and every sign-in starts Explorer until you delete it.
 6. **Edit the registry by hand.** Delete the `Shell` value under `HKCU\Software\Microsoft\Windows NT\CurrentVersion\Winlogon`. The machine-wide `HKLM` value is never touched.
-7. **Revert the VM** to its `clean` checkpoint.
+7. **In the test VM:** `pwsh etc/vm/deploy.ps1 -Restore` from the host removes the setting and starts Explorer, even when the VM's screen is black; or revert the VM to its `clean` checkpoint.
 
 Logs are in `%LOCALAPPDATA%\visor-shell\logs\` (`session.log`, `shell.log`, `wm.log`, and `visor.log` when Visor isn't run from a terminal). Windows hidden on other desktops are listed in `%LOCALAPPDATA%\visor-shell\wm-hidden.txt` while `visor-wm` runs.
-
-## Building
-
-Requirements: Visual Studio 2022+ with the C++ workload, CMake 3.21+, Ninja,
-and Python 3 (used once, to fetch Qt).
-
-```powershell
-pwsh etc/bootstrap.ps1          # pinned Qt 6.10.3 into .deps/ (gitignored)
-pwsh etc/build.ps1              # debug build of everything -> build/debug/
-pwsh etc/build.ps1 release      # what etc/vm/deploy.ps1 ships to the VM
-pwsh etc/build.ps1 -Run         # build, then run the bar
-pwsh etc/build.ps1 -RunShell    # build, then run visor-shell alongside Explorer (hosted mode)
-```
-
-`etc/build.ps1` loads the MSVC environment for you. From a VS Developer prompt or
-an IDE with CMake presets support you can use `cmake --preset debug` /
-`cmake --build --preset debug` directly. All executables, the Qt runtime and the
-bar's default config land in one folder, `build/<preset>/`.
-
-## Layout
-
-```
-src/bar/        visor.exe: C++ sources, QML types, the default config and the shipped themes (src/bar/config)
-src/shell/      visor-shell.exe
-src/session/    visor-session.exe
-src/wm/         visor-wm.exe (its default wm.conf ships in src/bar/config)
-src/common/     Code shared by all of them (exit codes, logging, the shell <-> bar link)
-etc/            Scripts: bootstrap, build, install/uninstall, icon and wallpaper generators
-etc/vm/         Test VM scripts: create, deploy, screenshot, input
-docs/           Design, plan, and the compatibility results
-.deps/          Local Qt toolchain (created by etc/bootstrap.ps1, not committed)
-```
-
-## Test VM
-
-All of these scripts run on the host. They need Hyper-V admin rights.
-
-```powershell
-pwsh etc/vm/new-vm.ps1 -Iso <win11.iso>   # create the VM, then install Windows 11 Pro
-pwsh etc/vm/new-vm.ps1 -Checkpoint        # take the "clean" checkpoint
-pwsh etc/vm/save-credential.ps1           # save the VM login (encrypted, outside the repo)
-pwsh etc/vm/deploy.ps1 -Install           # copy the build and make it the VM user's shell (replace mode)
-pwsh etc/vm/deploy.ps1 -Hosted            # copy the build, install hosted mode and start it (Explorer stays)
-pwsh etc/vm/deploy.ps1 -Hosted -Tiling    # the same, with visor-wm (tiling) on
-pwsh etc/vm/deploy.ps1                    # later deploys: copy everything to C:\visor and restart, either mode
-pwsh etc/vm/deploy.ps1 -Restore           # back to plain Explorer
-pwsh etc/vm/screenshot.ps1                # the VM's screen -> build/vm-screen.png
-pwsh etc/vm/input.ps1 -Click 948,16 -Button right   # click inside the VM
-pwsh etc/vm/input.ps1 -Key ctrl+alt+r     # press keys inside the VM
-pwsh etc/vm/run.ps1 -Script '...'         # run PowerShell in the VM user's session, and get its output
-pwsh etc/vm/screenshot.ps1 -Inside        # the screen as the signed-in user sees it (works in an Enhanced Session)
-```
-
-The VM has no sound hardware. For anything that needs an audio device (the volume keys), connect to it with vmconnect's **Enhanced Session** (View menu) with remote audio on: Windows in the VM then has a Remote Audio endpoint for as long as you're connected. While you are, the console shows the lock screen, so `screenshot.ps1` needs `-Inside`.
-
-`screenshot.ps1` and `input.ps1` work through Hyper-V and PowerShell Direct, so they need no VM window or focus on the host. Note that Windows 11 opens console programs in Windows Terminal, which takes the foreground. The input helper runs under `conhost --headless` so it doesn't disturb what it is testing.
 
 ## Hosted mode
 
@@ -221,7 +194,7 @@ Windows 11's virtual desktops live in Explorer, so they're gone in replace mode.
 
 Windows 11 draws no Alt+Tab switcher without Explorer: the key still switches windows, blind. In replace mode `visor-wm` takes the key and Visor shows a switcher like Windows 11's: a panel in the middle of the monitor you're working on with a live preview of each window on this desktop, most recently used first. Alt+Tab steps forward and Alt+Shift+Tab back, the arrow keys move, and releasing Alt (or Enter, or a click) goes to the chosen window; Esc leaves things as they were. The previews are DWM's own, so they're live; a minimised window shows blank. Under Explorer, Windows' switcher is untouched.
 
-## Phase 0 hotkeys
+## Shell hotkeys
 
 visor-shell's own, which work even when visor-wm is down:
 
@@ -232,3 +205,61 @@ visor-shell's own, which work even when visor-wm is down:
 | Ctrl+Alt+R | Run dialog |
 | Ctrl+Alt+Q | Quit to Explorer (in hosted mode: quit visor-shell, Visor and visor-wm; `visor-shell --quit` does the same from a script) |
 | Ctrl+Shift+Esc | Task Manager (handled by Windows itself) |
+
+## Development
+
+### Building
+
+Requirements: Visual Studio 2022+ with the C++ workload, CMake 3.21+, Ninja,
+and Python 3 (used once, to fetch Qt).
+
+```powershell
+pwsh etc/bootstrap.ps1          # pinned Qt 6.10.3 into .deps/ (gitignored)
+pwsh etc/build.ps1              # debug build of everything -> build/debug/
+pwsh etc/build.ps1 release      # what etc/vm/deploy.ps1 ships to the VM
+pwsh etc/build.ps1 -Run         # build, then run the bar
+pwsh etc/build.ps1 -RunShell    # build, then run visor-shell alongside Explorer (hosted mode)
+```
+
+`etc/build.ps1` loads the MSVC environment for you. From a VS Developer prompt or
+an IDE with CMake presets support you can use `cmake --preset debug` /
+`cmake --build --preset debug` directly. All executables, the Qt runtime and the
+bar's default config land in one folder, `build/<preset>/`.
+
+### Layout
+
+```
+src/bar/        visor.exe: C++ sources, QML types, the default config and the shipped themes (src/bar/config)
+src/shell/      visor-shell.exe
+src/session/    visor-session.exe
+src/wm/         visor-wm.exe (its default wm.conf ships in src/bar/config)
+src/common/     Code shared by all of them (exit codes, logging, the shell <-> bar link)
+etc/            Scripts: bootstrap, build, install/uninstall, icon and wallpaper generators
+etc/vm/         Test VM scripts: create, deploy, screenshot, input
+docs/           Design, plan, and the compatibility results
+.deps/          Local Qt toolchain (created by etc/bootstrap.ps1, not committed)
+```
+
+### Test VM
+
+All of these scripts run on the host. They need Hyper-V admin rights.
+
+```powershell
+pwsh etc/vm/new-vm.ps1 -Iso <win11.iso>   # create the VM, then install Windows 11 Pro
+pwsh etc/vm/new-vm.ps1 -Checkpoint        # take the "clean" checkpoint
+pwsh etc/vm/save-credential.ps1           # save the VM login (encrypted, outside the repo)
+pwsh etc/vm/deploy.ps1 -Install           # copy the build and make it the VM user's shell (replace mode)
+pwsh etc/vm/deploy.ps1 -Hosted            # copy the build, install hosted mode and start it (Explorer stays)
+pwsh etc/vm/deploy.ps1 -Hosted -Tiling    # the same, with visor-wm (tiling) on
+pwsh etc/vm/deploy.ps1                    # later deploys: copy everything to C:\visor and restart, either mode
+pwsh etc/vm/deploy.ps1 -Restore           # back to plain Explorer
+pwsh etc/vm/screenshot.ps1                # the VM's screen -> build/vm-screen.png
+pwsh etc/vm/input.ps1 -Click 948,16 -Button right   # click inside the VM
+pwsh etc/vm/input.ps1 -Key ctrl+alt+r     # press keys inside the VM
+pwsh etc/vm/run.ps1 -Script '...'         # run PowerShell in the VM user's session, and get its output
+pwsh etc/vm/screenshot.ps1 -Inside        # the screen as the signed-in user sees it (works in an Enhanced Session)
+```
+
+The VM has no sound hardware. For anything that needs an audio device (the volume keys), connect to it with vmconnect's **Enhanced Session** (View menu) with remote audio on: Windows in the VM then has a Remote Audio endpoint for as long as you're connected. While you are, the console shows the lock screen, so `screenshot.ps1` needs `-Inside`.
+
+`screenshot.ps1` and `input.ps1` work through Hyper-V and PowerShell Direct, so they need no VM window or focus on the host. Note that Windows 11 opens console programs in Windows Terminal, which takes the foreground. The input helper runs under `conhost --headless` so it doesn't disturb what it is testing.
