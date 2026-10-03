@@ -13,8 +13,6 @@
 
 namespace {
 
-constexpr int kRecentCount = 6;
-
 bool launchable(const AppIndex::App &app)
 {
     if (!app.packaged || !app.launchPath.isEmpty())
@@ -80,8 +78,6 @@ QVariant Apps::data(const QModelIndex &index, int role) const
         return app.packaged;
     case LaunchableRole:
         return launchable(app);
-    case RecentRole:
-        return m_recentRows.contains(index.row());
     default:
         return {};
     }
@@ -91,7 +87,7 @@ QHash<int, QByteArray> Apps::roleNames() const
 {
     return {
         {KeyRole, "key"},           {NameRole, "name"},   {IdRole, "id"},   {IconRole, "icon"},
-        {PackagedRole, "packaged"}, {LaunchableRole, "launchable"}, {RecentRole, "recent"},
+        {PackagedRole, "packaged"}, {LaunchableRole, "launchable"},
     };
 }
 
@@ -145,50 +141,37 @@ void Apps::rebuild()
     const AppIndex *index = AppIndex::instance();
     beginResetModel();
     m_rows.clear();
-    m_recentRows.clear();
     if (index) {
         const QList<AppIndex::App> &apps = index->apps();
-        struct Hit
-        {
-            int row;
-            int score;
-        };
-        QList<Hit> hits;
-        for (int i = 0; i < apps.size(); ++i) {
-            if (const int score = fuzzyScore(m_query, apps[i].name))
-                hits.append({i, score});
-        }
-        const auto byUse = [&apps](int a, int b) {
-            return std::tie(apps[b].lastLaunch, apps[a].name) < std::tie(apps[a].lastLaunch, apps[b].name);
-        };
         if (m_query.isEmpty()) {
-            // Recently opened first, then everything A-Z (the index is sorted).
-            QList<int> recent;
-            for (const Hit &h : std::as_const(hits)) {
-                if (apps[h.row].launches > 0 && launchable(apps[h.row]))
-                    recent.append(h.row);
-            }
-            std::sort(recent.begin(), recent.end(), byUse);
-            recent = recent.mid(0, kRecentCount);
-            for (int row : std::as_const(recent)) {
-                m_recentRows.append(int(m_rows.size()));
-                m_rows.append(row);
-            }
-            for (const Hit &h : std::as_const(hits))
-                m_rows.append(h.row);
+            // Everything A-Z (the index is sorted).
+            for (int i = 0; i < apps.size(); ++i)
+                m_rows.append(i);
         } else {
+            struct Hit
+            {
+                int row;
+                int score;
+            };
+            QList<Hit> hits;
+            for (int i = 0; i < apps.size(); ++i) {
+                if (const int score = fuzzyScore(m_query, apps[i].name))
+                    hits.append({i, score});
+            }
             // Best match first; apps that can't open sink below those that
-            // can; use breaks ties.
-            std::stable_sort(hits.begin(), hits.end(), [&apps, &byUse](const Hit &a, const Hit &b) {
-                const bool la = launchable(apps[a.row]);
-                const bool lb = launchable(apps[b.row]);
-                if (la != lb)
-                    return la;
+            // can; use, then the name, breaks ties.
+            std::stable_sort(hits.begin(), hits.end(), [&apps](const Hit &a, const Hit &b) {
+                const AppIndex::App &x = apps[a.row];
+                const AppIndex::App &y = apps[b.row];
+                const bool lx = launchable(x);
+                const bool ly = launchable(y);
+                if (lx != ly)
+                    return lx;
                 if (a.score != b.score)
                     return a.score > b.score;
-                if (apps[a.row].launches != apps[b.row].launches)
-                    return apps[a.row].launches > apps[b.row].launches;
-                return byUse(a.row, b.row);
+                if (x.launches != y.launches)
+                    return x.launches > y.launches;
+                return std::tie(y.lastLaunch, x.name) < std::tie(x.lastLaunch, y.name);
             });
             for (const Hit &h : std::as_const(hits))
                 m_rows.append(h.row);
@@ -196,6 +179,64 @@ void Apps::rebuild()
     }
     endResetModel();
     emit countChanged();
+}
+
+// ---- Desktop ----------------------------------------------------------------
+
+DesktopItems::DesktopItems(QObject *parent)
+    : QAbstractListModel(parent)
+{
+    AppIndex *index = AppIndex::instance();
+    if (!index)
+        return;
+    index->ensureIndexed();
+    connect(index, &AppIndex::changed, this, [this] {
+        beginResetModel();
+        endResetModel();
+        emit countChanged();
+    });
+}
+
+int DesktopItems::count() const
+{
+    return AppIndex::instance() ? int(AppIndex::instance()->desktop().size()) : 0;
+}
+
+int DesktopItems::rowCount(const QModelIndex &parent) const
+{
+    return parent.isValid() ? 0 : count();
+}
+
+QVariant DesktopItems::data(const QModelIndex &index, int role) const
+{
+    if (!index.isValid() || index.row() >= count())
+        return {};
+    const AppIndex::App &item = AppIndex::instance()->desktop()[index.row()];
+    switch (role) {
+    case KeyRole:
+        return item.key;
+    case NameRole:
+        return item.name;
+    case IdRole:
+        return item.id;
+    case IconRole:
+        return QStringLiteral("image://visor-app-icon/%1").arg(item.key);
+    default:
+        return {};
+    }
+}
+
+QHash<int, QByteArray> DesktopItems::roleNames() const
+{
+    return {{KeyRole, "key"}, {NameRole, "name"}, {IdRole, "id"}, {IconRole, "icon"}};
+}
+
+void DesktopItems::launch(int row, bool asAdmin)
+{
+    if (row < 0 || row >= count())
+        return;
+    AppIndex *index = AppIndex::instance();
+    index->launch(index->desktop()[row].key, asAdmin);
 }
 
 // ---- Icons ------------------------------------------------------------------

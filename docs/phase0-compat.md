@@ -102,3 +102,5 @@ Checked live on Ryan's desktop (replace mode, build 26300, 3440x1440, no battery
 | Keyboard layout | Needs a second layout | | Not tested: one layout installed |
 | Restart required | Needs a pending Windows Update | | Not tested |
 | Mic / camera in use | Start a call or recording | | Not tested |
+| Desktop in the launcher | Win; type a few letters | ✅ | `visor.log`: "indexed 169 apps and 11 desktop items", the 11 Explorer shows (Recycle Bin, 4 from the user's Desktop, 6 from the Public one); a first cut opened `FOLDERID_Desktop` as a shell item, which is the namespace root, and listed 32. The grid stays while All apps filters; checked by Ryan |
+| Desktop folder, This PC, Recycle Bin from the launcher | Show them in Desktop icon settings, open one | | Not tested: expected to open Explorer as a file-manager window, as Super+E does |

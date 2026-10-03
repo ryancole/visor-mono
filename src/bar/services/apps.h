@@ -5,8 +5,8 @@
 #include <QtQml/qqmlregistration.h>
 
 // The launcher's results: the installed apps (see AppIndex) that match
-// `query`, best first. With an empty query it's the recently opened apps,
-// then every app A-Z, like Start's "All" list.
+// `query`, best first. With an empty query it's every app A-Z, like
+// Start's "All" list. The desktop is in DesktopItems, which isn't filtered.
 //
 //   ListView {
 //       model: Apps
@@ -24,7 +24,7 @@
 //
 // Roles: key, name, id, icon (an image:// URL), packaged, launchable (false
 // for UWP apps in replace mode, which can't open a window without
-// Explorer), recent (opened before, and shown first for an empty query).
+// Explorer).
 class Apps : public QAbstractListModel
 {
     Q_OBJECT
@@ -44,7 +44,6 @@ public:
         IconRole,
         PackagedRole,
         LaunchableRole,
-        RecentRole,
     };
 
     explicit Apps(QObject *parent = nullptr);
@@ -77,8 +76,42 @@ private:
     void rebuild();
 
     QString m_query;
-    QList<int> m_rows;      // indices into AppIndex::apps()
-    QList<int> m_recentRows;
+    QList<int> m_rows; // indices into AppIndex::apps()
+};
+
+// The launcher's desktop grid: what Explorer would show on the desktop
+// (AppIndex::desktop()), in its order.
+//
+// Roles: key, name, id, icon (an image:// URL).
+class DesktopItems : public QAbstractListModel
+{
+    Q_OBJECT
+    QML_ELEMENT
+    QML_SINGLETON
+
+    Q_PROPERTY(int count READ count NOTIFY countChanged)
+
+public:
+    enum Role {
+        KeyRole = Qt::UserRole + 1,
+        NameRole,
+        IdRole,
+        IconRole,
+    };
+
+    explicit DesktopItems(QObject *parent = nullptr);
+
+    int count() const;
+
+    int rowCount(const QModelIndex &parent = {}) const override;
+    QVariant data(const QModelIndex &index, int role) const override;
+    QHash<int, QByteArray> roleNames() const override;
+
+    // Opens the item in row `row`, as a double-click on the desktop would.
+    Q_INVOKABLE void launch(int row, bool asAdmin = false);
+
+signals:
+    void countChanged();
 };
 
 // image://visor-app-icon/<key>: an app's icon from the shell (the shortcut's
