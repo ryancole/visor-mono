@@ -19,13 +19,13 @@ PanelWindow {
         precision: SystemClock.Minutes
     }
 
-    // Left: desktops and open windows (with visor-shell / visor-wm).
+    // Left: the launcher button and desktops (with visor-wm).
     Row {
         id: left
         anchors.left: parent.left
         anchors.leftMargin: 12
         anchors.verticalCenter: parent.verticalCenter
-        width: Math.max(0, center.x - x - 24)
+        width: Math.max(0, tasks.x - x - 24)
         spacing: 8
 
         // Like Start: left-click for the launcher, right-click for the
@@ -80,10 +80,22 @@ PanelWindow {
         Desktops {
             anchors.verticalCenter: parent.verticalCenter
         }
+    }
 
-        TaskList {
-            anchors.verticalCenter: parent.verticalCenter
-        }
+    // Either side of the centre (with visor-shell): the open windows on its
+    // left, the notification area on its right, so both grow outwards from
+    // the clock.
+    TaskList {
+        id: tasks
+        anchors.right: center.left
+        anchors.rightMargin: 16
+        anchors.verticalCenter: parent.verticalCenter
+    }
+
+    TrayArea {
+        anchors.left: center.right
+        anchors.leftMargin: 16
+        anchors.verticalCenter: parent.verticalCenter
     }
 
     // Centre: the clock, with the status indicators Windows' taskbar has,
@@ -178,7 +190,7 @@ PanelWindow {
         }
     }
 
-    // Right: tray, volume and notifications. No now-playing here: Windows
+    // Right: the hardware cluster and notifications. No now-playing here: Windows
     // shows media only in the volume flyout and on the lock screen, and the
     // `Media` type is there for a config that wants it anyway.
     Row {
@@ -187,10 +199,6 @@ PanelWindow {
         anchors.top: parent.top
         anchors.bottom: parent.bottom
         spacing: 16
-
-        TrayArea {
-            anchors.verticalCenter: parent.verticalCenter
-        }
 
         // The cluster and the bell sit as close as the cluster's own icons:
         // its 8px padding plus the bell's bearing is 13px of ink gap, so the
