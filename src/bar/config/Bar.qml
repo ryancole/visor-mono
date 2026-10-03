@@ -74,7 +74,9 @@ PanelWindow {
         font.weight: Font.DemiBold
     }
 
-    // Right: tray, media, volume and notifications.
+    // Right: tray, volume and notifications. No now-playing here: Windows
+    // shows media only in the volume flyout and on the lock screen, and the
+    // `Media` type is there for a config that wants it anyway.
     Row {
         anchors.right: parent.right
         anchors.rightMargin: 12
@@ -84,37 +86,6 @@ PanelWindow {
 
         TrayArea {
             anchors.verticalCenter: parent.verticalCenter
-        }
-
-        // Click: play/pause. Hidden when nothing is playing.
-        Item {
-            visible: Media.available && Media.title !== ""
-            width: media.implicitWidth
-            height: parent.height
-
-            Row {
-                id: media
-                anchors.verticalCenter: parent.verticalCenter
-                spacing: 6
-
-                Icon {
-                    anchors.verticalCenter: parent.verticalCenter
-                    glyph: Media.playing ? "" : "" // Pause / Play
-                    color: Theme.accent
-                }
-                Label {
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: Math.min(implicitWidth, 280)
-                    text: Media.artist !== "" ? Media.artist + " – " + Media.title : Media.title
-                }
-            }
-
-            MouseArea {
-                anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
-                acceptedButtons: Qt.LeftButton | Qt.RightButton
-                onClicked: mouse => mouse.button === Qt.RightButton ? Media.next() : Media.playPause()
-            }
         }
 
         // Click: mute. Scroll: volume.
