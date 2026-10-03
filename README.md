@@ -5,15 +5,15 @@ Omarchy-style desktop: tiling, keyboard-driven, themeable. Native C++ and Qt,
 event-driven, small. It can run as a plain app under Explorer, or replace
 `explorer.exe` as the Windows shell.
 
-Status: **phase 8 (done)**: [hosted mode](#hosted-mode), where Explorer stays the shell with its taskbar auto-hidden and everything that lives in Explorer keeps working, on top of phase 7's Alt+Tab switcher with live previews, the programs Windows starts at sign-in, and clean sign-out, phase 6's notifications (toast pop-ups and a Notification Center in Visor, read from the notification platform that keeps running without Explorer) and on-screen display for the volume keys, phase 5's Windows themes, followed and switched by Visor (bar, wallpaper, dark/light mode, accent, window borders and the Terminal scheme in one go), phase 4's app launcher, power menu and key-binding cheat sheet in Visor, phase 3's Hyprland-style tiling, key bindings and Windows-style virtual desktops (`visor-wm`) and phase 2's desktop, wallpaper, task list and tray, app bars and work areas, fullscreen detection and Visor supervision. Phase 0 results (what breaks without Explorer) are in [docs/phase0-compat.md](docs/phase0-compat.md).
+Status: **phase 9 (done)**: tiling under Explorer, so [hosted mode](#hosted-mode) gets `visor-wm` when you turn it on, with Windows keeping its own keys and virtual desktops, and a watchdog for the hosted shell, on top of phase 8's [hosted mode](#hosted-mode), where Explorer stays the shell with its taskbar auto-hidden and everything that lives in Explorer keeps working, phase 7's Alt+Tab switcher with live previews, the programs Windows starts at sign-in, and clean sign-out, phase 6's notifications (toast pop-ups and a Notification Center in Visor, read from the notification platform that keeps running without Explorer) and on-screen display for the volume keys, phase 5's Windows themes, followed and switched by Visor (bar, wallpaper, dark/light mode, accent, window borders and the Terminal scheme in one go), phase 4's app launcher, power menu and key-binding cheat sheet in Visor, phase 3's Hyprland-style tiling, key bindings and Windows-style virtual desktops (`visor-wm`) and phase 2's desktop, wallpaper, task list and tray, app bars and work areas, fullscreen detection and Visor supervision. Phase 0 results (what breaks without Explorer) are in [docs/phase0-compat.md](docs/phase0-compat.md).
 See [docs/design.md](docs/design.md) for the architecture and plan.
 
 | Program | Source | What it is |
 | --- | --- | --- |
 | `visor.exe` | [`src/bar`](src/bar) | The status bar, launcher, menus and theme switcher, configured in QML (live reload). It draws all of the UI. It works on its own under Explorer; with visor-shell it also shows tasks and the tray. See [src/bar/README.md](src/bar/README.md) for config and the QML API. |
-| `visor-session.exe` | [`src/session`](src/session) | What Windows starts at sign-in. Plain Win32, static CRT, no Qt. Starts `visor-shell`, restarts it after a crash, and falls back to Explorer when it can't run. |
+| `visor-session.exe` | [`src/session`](src/session) | What Windows starts at sign-in: as the shell in replace mode, from a Run entry in hosted mode. Plain Win32, static CRT, no Qt. Starts `visor-shell`, restarts it after a crash, and (as the shell) falls back to Explorer when it can't run. |
 | `visor-shell.exe` | [`src/shell`](src/shell) | Shell services: desktop and wallpaper, the shell-ready signal, hotkeys, window (task) tracking, the notification area (`Shell_TrayWnd`), the app bar server, and starting and supervising Visor and visor-wm. Draws no UI of its own. Visor does that, over the link in [`src/common/linkprotocol.h`](src/common/linkprotocol.h). |
-| `visor-wm.exe` | [`src/wm`](src/wm) | The tiling window manager, in Hyprland's role: tiles app windows with the dwindle layout inside the space Visor's bar leaves. Configured by a `hyprland.conf`-style `wm.conf`. See [Window manager](#window-manager). |
+| `visor-wm.exe` | [`src/wm`](src/wm) | The tiling window manager, in Hyprland's role: tiles app windows with the dwindle layout inside the space Visor's bar leaves, as the shell or under Explorer. Configured by a `hyprland.conf`-style `wm.conf`. See [Window manager](#window-manager). |
 
 ## Safety first
 
@@ -77,6 +77,7 @@ pwsh etc/vm/new-vm.ps1 -Checkpoint        # take the "clean" checkpoint
 pwsh etc/vm/save-credential.ps1           # save the VM login (encrypted, outside the repo)
 pwsh etc/vm/deploy.ps1 -Install           # copy the build and make it the VM user's shell (replace mode)
 pwsh etc/vm/deploy.ps1 -Hosted            # copy the build, install hosted mode and start it (Explorer stays)
+pwsh etc/vm/deploy.ps1 -Hosted -Tiling    # the same, with visor-wm (tiling) on
 pwsh etc/vm/deploy.ps1                    # later deploys: copy everything to C:\visor and restart, either mode
 pwsh etc/vm/deploy.ps1 -Restore           # back to plain Explorer
 pwsh etc/vm/screenshot.ps1                # the VM's screen -> build/vm-screen.png
@@ -94,12 +95,13 @@ The VM has no sound hardware. For anything that needs an audio device (the volum
 
 Explorer stays the Windows shell and `visor-shell --mode hosted` runs alongside it. This is the Windows-conventional configuration, and the one for a real machine: Windows has no supported way to replace Explorer on desktop editions (Shell Launcher is for Enterprise kiosks, and loses Store apps too), so everything that lives in Explorer keeps working here: Settings and Store apps, Windows' own toasts and Notification Center, Quick Settings, the volume flyout, Snap, Task View, Windows' Alt+Tab, Win+Shift+S and clipboard history. Replace mode stays the lighter path.
 
-- **Starting at sign-in:** `etc/install.ps1 -Hosted` adds a Run entry (`HKCU\...\CurrentVersion\Run\visor-shell`), the way Windows starts any app at sign-in; it shows in Settings > Apps > Startup, where it can be turned off. The entry and the replace-mode shell override are exclusive: each install removes the other, and `uninstall.ps1` removes both. In the VM, `pwsh etc/vm/deploy.ps1 -Hosted` does it all and starts the shell.
+- **Starting at sign-in:** `etc/install.ps1 -Hosted` adds a Run entry (`HKCU\...\CurrentVersion\Run\visor-shell`) for `visor-session --mode hosted`, the way Windows starts any app at sign-in; it shows in Settings > Apps > Startup, where it can be turned off. `visor-session` is the same watchdog as in replace mode: it starts `visor-shell --mode hosted`, restarts it after a crash (the taskbar stays auto-hidden meanwhile, and the record of its original state is kept), and ends when the shell quits on purpose. Explorer is there already, so it never starts one. The entry and the replace-mode shell override are exclusive: each install removes the other, and `uninstall.ps1` removes both. In the VM, `pwsh etc/vm/deploy.ps1 -Hosted` does it all and starts the shell.
 - **The taskbar:** visor-shell asks Explorer's taskbar to auto-hide, through the documented app bar API (`ABM_SETSTATE`; `Shell_TrayWnd` is left alone), so Visor's bar is the one on screen and the taskbar is a hover away at the bottom. Auto-hide is Explorer's own setting and persists, so the original is recorded in `HKCU\Software\visor-shell` the first time it is changed and put back on a clean exit: Ctrl+Alt+Q, the menu's **Quit Visor**, or `visor-shell --quit`. A crash leaves it for the next run to restore, and a restarted Explorer is asked again.
-- **What visor-shell does here:** starts and supervises Visor and feeds it the task list. Not the desktop, the tray (Explorer's auto-hidden taskbar has it, Visor's own icon included), app bars (Visor's bars register with Explorer's), the startup programs, or visor-wm.
-- **Keys:** Explorer keeps every Win-key shortcut. The launcher and the menu open from the bar's button (left and right click). Tiling stays opt-in: run `visor-wm.exe` by hand (its Win-key bindings then compete with Explorer's; not tested under Explorer). Ctrl+Alt+Q quits visor-shell and Visor together.
-- **What Visor leaves to Windows:** toasts and the Notification Center (no bell in the bar), the volume display and the Alt+Tab switcher. The theme picker's last row, **Personalization settings...**, opens Settings. All of it verified in the VM: see [docs/phase0-compat.md](docs/phase0-compat.md#hosted-mode-explorer-stays-the-shell).
-- **Not done:** nothing restarts a crashed hosted visor-shell (`visor-session` is replace mode's watchdog); Visor keeps running as a plain bar, and starting visor-shell again brings the task list back. Tray icons stay on Explorer's taskbar; taking over `Shell_TrayWnd` by z-order so they come to the bar is a later option.
+- **What visor-shell does here:** starts and supervises Visor and feeds it the task list, and starts and supervises visor-wm when tiling is on. Not the desktop, the tray (Explorer's auto-hidden taskbar has it, Visor's own icon included), app bars (Visor's bars register with Explorer's), or the startup programs.
+- **Tiling** is off by default under Explorer and on with `install.ps1 -Hosted -Tiling` (`deploy.ps1 -Hosted -Tiling` in the VM): a `Tiling` value under `HKCU\Software\visor-shell`, where the shell keeps its other state; `-Hosted` without `-Tiling` turns it off again. With it on, visor-shell runs `visor-wm --mode hosted`, which tiles windows on the current Windows desktop and binds Omarchy's keys, but leaves Windows every key it acts on itself and its own virtual desktops: see [Keys](#keys) and [Desktops](#desktops). Without it, Explorer keeps every Win-key shortcut.
+- **Keys:** the launcher and the menu open from the bar's button (left and right click); Win, Win+S, Win+X and Win+R stay Windows' whether tiling is on or not. Ctrl+Alt+Q quits visor-shell, Visor and visor-wm together.
+- **What Visor leaves to Windows:** toasts and the Notification Center (no bell in the bar), the volume display and the Alt+Tab switcher. The theme picker's last row, **Personalization settings...**, opens Settings. All of it verified in the VM, with tiling on too: see [docs/phase0-compat.md](docs/phase0-compat.md#hosted-mode-explorer-stays-the-shell).
+- **Not done:** tray icons stay on Explorer's taskbar; taking over `Shell_TrayWnd` by z-order so they come to the bar is a later option.
 
 ## At sign-in
 
@@ -143,7 +145,7 @@ Windows shows toasts, keeps them in the Notification Center and puts a flyout on
 
 ## Window manager
 
-`visor-wm` tiles windows the way Hyprland does in Omarchy. visor-shell starts it in replace mode and restarts it if it crashes. Under Explorer it never starts by itself: run `visor-wm.exe` by hand to try tiling. It has no window, so stop it from Task Manager; your windows stay where they are.
+`visor-wm` tiles windows the way Hyprland does in Omarchy. visor-shell starts it and restarts it if it crashes: always in replace mode, and under Explorer when tiling is on (see [Hosted mode](#hosted-mode)). It can also be run by hand (`visor-wm.exe`; `--mode auto`, the default, sees whether Explorer is the shell). It has no window, so stop it from Task Manager; your windows stay where they are.
 
 - **Dwindle layout:** each new window splits the focused one, side by side when the space is wider than tall, otherwise one above the other. Closing a window gives its space back.
 - **What tiles:** normal resizable app windows. Dialogs, fixed-size, always-on-top and fullscreen windows float, and so do windows of elevated apps (such as Task Manager), because Windows won't let a normal app move them.
@@ -179,6 +181,8 @@ The default bindings follow Omarchy. They are all `bind` lines in `wm.conf`, in 
 
 Windows reserves some Win-key combinations even without Explorer (Win+arrows, Win+Shift+arrows, Win+Return, Win+=), so `visor-wm` catches those with a keyboard hook instead of a hotkey, as it does the bare Win press (`bindr = SUPER, SUPER_L, ...`: fires on release, if nothing else was pressed). One limit comes with that: they don't work while an app running as administrator has focus. Win+L always locks the screen.
 
+**Under Explorer** (hosted mode with tiling on) Windows keeps every key it acts on itself, and `visor-wm` skips those bindings: the bare Win press (Start), Win+S, Win+X, Win+R, Win+N, Alt+Tab and Alt+Shift+Tab, the volume keys (any binding with no modifier), and the desktop keys (Win+Ctrl+D, F4, Left, Right, and the two movetoworkspace rows, since the desktops are Windows' there). `wm.log` lists them as "left to Windows", and the cheat sheet leaves them out. The rest binds as usual: the tiling keys, Super+Return, Super+E, Super+K, the theme key. Two notes on that. Win+arrows and Win+Shift+arrows are Snap in Windows, but Snap would pull a window out of its tile, so with tiling on they move focus and swap, as above (swapping with nothing to swap with moves the window to the next monitor, which is what Win+Shift+arrows do in Windows). And Super+W, V, F, K and E are Explorer's too (Widgets, clipboard history, Feedback Hub, Cast, Explorer); the keyboard hook takes them, so those Windows features lose their keys while `visor-wm` runs.
+
 ### Desktops
 
 Windows 11's virtual desktops live in Explorer, so they're gone in replace mode. `visor-wm` provides its own, working the way Windows' do:
@@ -195,6 +199,7 @@ Windows 11's virtual desktops live in Explorer, so they're gone in replace mode.
 - Once there are two or more desktops, the bar shows them as numbered pills. Click one to switch, or scroll over them.
 - Windows has no key for moving a window to another desktop (it uses Task View), so the last row is our addition.
 - Windows on other desktops are hidden. Desktops survive `visor-wm` restarting (after a crash, a redeploy, or visor-shell restarting): the next `visor-wm` picks up the desktops and their hidden windows. If the session goes back to Explorer (Ctrl+Alt+Q, or visor-shell not coming back), every window is shown first, so none is ever lost.
+- **Under Explorer** Windows' own desktops are there (Win+Ctrl+D, Task View), so these are off and the bar shows no pills. `visor-wm` tiles each Windows desktop on its own: it asks Windows which desktop a window is on (`IVirtualDesktopManager`), keeps a layout per desktop, and follows a switch when the new desktop's windows appear, so a layout is as you left it when you come back. A window moved to another desktop in Task View joins the layout there.
 
 
 ### Window switcher
@@ -210,5 +215,5 @@ visor-shell's own, which work even when visor-wm is down:
 | Ctrl+Alt+E | File Explorer (This PC) |
 | Ctrl+Alt+T | Windows Terminal, or cmd if it won't start |
 | Ctrl+Alt+R | Run dialog |
-| Ctrl+Alt+Q | Quit to Explorer (in hosted mode: quit visor-shell and Visor; `visor-shell --quit` does the same from a script) |
+| Ctrl+Alt+Q | Quit to Explorer (in hosted mode: quit visor-shell, Visor and visor-wm; `visor-shell --quit` does the same from a script) |
 | Ctrl+Shift+Esc | Task Manager (handled by Windows itself) |

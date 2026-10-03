@@ -9,7 +9,9 @@
 //            mode for a real machine, where Settings, Store apps and Windows'
 //            own toasts, flyouts and Alt+Tab keep working.
 // The default, auto, picks replace only when no shell window exists yet.
-// Both modes start and supervise Visor; replace mode also runs visor-wm.
+// Both modes start and supervise Visor. Replace mode also runs visor-wm;
+// hosted mode does when the user turned tiling on (the Tiling value under
+// HKCU\Software\visor-shell, written by etc/install.ps1 -Hosted -Tiling).
 
 #include "common/exitcodes.h"
 #include "common/linkprotocol.h"
@@ -30,6 +32,7 @@
 #include <QDebug>
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QSettings>
 #include <QTimer>
 
 #include <windows.h>
@@ -221,14 +224,12 @@ int main(int argc, char *argv[])
         });
     }
     // Ctrl+Alt+Q, Visor's menu or `visor-shell --quit`: hand the session to
-    // Explorer. Visor goes too, in both modes; a visor-wm run by hand in
-    // hosted mode is the user's to stop.
+    // Explorer. Visor and visor-wm go too, in both modes.
     const auto quitToExplorer = [&] {
         qInfo() << "quit requested";
         link.stopVisor();
         // Shows windows hidden on other desktops before Explorer comes.
-        if (mode == Mode::Replace)
-            link.sendToWm({{QStringLiteral("type"), QStringLiteral("quit")}});
+        link.sendToWm({{QStringLiteral("type"), QStringLiteral("quit")}});
         // As the shell, ask visor-session to hand over to Explorer.
         // Hosted, Explorer is already there: just exit.
         QCoreApplication::exit(mode == Mode::Replace ? visor::exitcode::StartExplorer : 0);
@@ -322,13 +323,21 @@ int main(int argc, char *argv[])
     if (mode == Mode::Replace)
         QTimer::singleShot(3000, &startup, &visor::Startup::run);
 
-    // The tiling window manager. Replace mode only: on a machine where
-    // Explorer is the shell, tiling is opt-in (run visor-wm by hand).
+    // The tiling window manager: always as the shell; under Explorer only
+    // when tiling is turned on (it takes some of Explorer's Win-key shortcuts).
+    bool tiling = mode == Mode::Replace;
+    if (mode == Mode::Hosted) {
+        const QSettings store(QStringLiteral("HKEY_CURRENT_USER\\Software\\visor-shell"), QSettings::NativeFormat);
+        tiling = store.value(QStringLiteral("Tiling")).toInt() != 0;
+        qInfo() << "tiling:" << (tiling ? "on" : "off");
+    }
     std::unique_ptr<visor::Supervisor> windowManager;
-    if (mode == Mode::Replace) {
+    if (tiling) {
         windowManager = std::make_unique<visor::Supervisor>(
             QStringLiteral("visor-wm.exe"),
-            QStringList{QStringLiteral("--shell-pid"), QString::number(QCoreApplication::applicationPid())});
+            QStringList{QStringLiteral("--shell-pid"), QString::number(QCoreApplication::applicationPid()),
+                        QStringLiteral("--mode"),
+                        mode == Mode::Replace ? QStringLiteral("replace") : QStringLiteral("hosted")});
         // Until a restarted visor-wm reports in, there are no desktops.
         QObject::connect(windowManager.get(), &visor::Supervisor::exited, &app, [&] {
             desktops = {};

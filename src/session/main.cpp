@@ -1,4 +1,5 @@
-// visor-session: the program Winlogon starts as the user's shell.
+// visor-session: the program Winlogon starts as the user's shell, and the
+// one the hosted-mode Run entry starts (`visor-session --mode hosted`).
 //
 // It owns no windows and does no shell work itself. It starts visor-shell,
 // restarts it if it crashes, and hands the session to Explorer whenever
@@ -8,6 +9,9 @@
 //   - visor-shell.exe missing or failing to start
 //   - visor-shell crashing 3 times within 60 seconds
 //   - visor-shell asking for it (exitcode::StartExplorer)
+//
+// In hosted mode Explorer is the shell already, so in each of those cases it
+// simply gives up, and a visor-shell that exits cleanly (Ctrl+Alt+Q) ends it.
 //
 // Linked against the static CRT and only system DLLs, so it keeps working
 // even when the Qt or VC++ runtime DLLs are broken.
@@ -154,11 +158,13 @@ bool sessionEnding()
 
 } // namespace
 
-int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
+int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR commandLine, int)
 {
     g_dataDir = localAppData() + L"\\visor-shell";
     trimLog();
-    log(L"visor-session " VISOR_VERSION " starting");
+    // The only option: --mode hosted (Explorer stays; the Run entry's way).
+    const bool hosted = wcsstr(commandLine, L"--mode hosted") != nullptr;
+    log(L"visor-session " VISOR_VERSION " starting (%ls)", hosted ? L"hosted" : L"replace");
 
     // Winlogon restarts the configured shell when the shell-window process
     // (visor-shell) dies, so a crash can start a second visor-session while
@@ -170,28 +176,32 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
         return 1;
     }
 
-    // Exit codes below are always non-zero: see common/exitcodes.h.
-    if (safeModeRequested()) {
-        startExplorer(L"safe mode");
+    // Hosted, Explorer is there: where replace mode would start it, just
+    // stop. Exit codes below are always non-zero: see common/exitcodes.h.
+    const auto giveUp = [hosted](const wchar_t *reason) {
+        if (hosted)
+            log(L"stopping: %ls", reason);
+        else
+            startExplorer(reason);
         return 1;
-    }
+    };
+
+    if (safeModeRequested())
+        return giveUp(L"safe mode");
 
     const std::wstring shell = exeDir() + L"\\visor-shell.exe";
-    if (!fileExists(shell)) {
-        startExplorer(L"visor-shell.exe not found");
-        return 1;
-    }
+    if (!fileExists(shell))
+        return giveUp(L"visor-shell.exe not found");
 
     std::deque<ULONGLONG> crashes;
     for (;;) {
-        std::wstring cmd = L"\"" + shell + L"\" --mode replace";
+        std::wstring cmd = L"\"" + shell + (hosted ? L"\" --mode hosted" : L"\" --mode replace");
         STARTUPINFOW si{};
         si.cb = sizeof(si);
         PROCESS_INFORMATION pi{};
         if (!CreateProcessW(nullptr, cmd.data(), nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi)) {
             log(L"failed to start visor-shell (error %lu)", GetLastError());
-            startExplorer(L"visor-shell failed to start");
-            return 1;
+            return giveUp(L"visor-shell failed to start");
         }
         CloseHandle(pi.hThread);
         log(L"visor-shell started (pid %lu)", pi.dwProcessId);
@@ -217,6 +227,12 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
         case visor::exitcode::Refused:
             // Something else already owns the session; stay out of its way.
             return 1;
+        case 0:
+            // A hosted visor-shell quit on purpose (Ctrl+Alt+Q, --quit). As
+            // the shell it never exits 0; treat that as a crash.
+            if (hosted)
+                return 0;
+            break;
         default:
             break;
         }
@@ -227,10 +243,8 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
         crashes.push_back(now);
         while (!crashes.empty() && now - crashes.front() > kCrashWindowMs)
             crashes.pop_front();
-        if (int(crashes.size()) >= kMaxCrashes) {
-            startExplorer(L"visor-shell keeps crashing");
-            return 1;
-        }
+        if (int(crashes.size()) >= kMaxCrashes)
+            return giveUp(L"visor-shell keeps crashing");
         Sleep(kRestartDelayMs);
     }
 }

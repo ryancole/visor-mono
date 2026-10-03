@@ -12,10 +12,13 @@
 
     Hosted mode (-Hosted) leaves Explorer as the shell and adds a Run entry
         HKCU\Software\Microsoft\Windows\CurrentVersion\Run\visor-shell
-    that starts `visor-shell --mode hosted` at sign-in, the way Windows starts
-    any app at sign-in (it shows in Settings > Apps > Startup, where it can be
-    turned off). visor-shell then starts Visor and asks Explorer's taskbar to
-    auto-hide.
+    that starts `visor-session --mode hosted` at sign-in, the way Windows
+    starts any app at sign-in (it shows in Settings > Apps > Startup, where it
+    can be turned off). visor-session starts visor-shell and restarts it if it
+    crashes; visor-shell starts Visor and asks Explorer's taskbar to auto-hide.
+    With -Tiling it also runs visor-wm, which takes the tiling keys from
+    Explorer (the Tiling value under HKCU\Software\visor-shell; -Hosted
+    without -Tiling turns it off again).
 
     The two are exclusive: each install removes the other's entry, since in
     replace mode visor-shell runs the Run entries itself. Either takes effect
@@ -29,6 +32,7 @@
 .EXAMPLE
     .\install.ps1 -Path C:\visor\visor-session.exe
     .\install.ps1 -Path C:\visor\visor-session.exe -Hosted
+    .\install.ps1 -Path C:\visor\visor-session.exe -Hosted -Tiling
 #>
 [CmdletBinding()]
 param(
@@ -37,6 +41,8 @@ param(
     [string] $Path = (Join-Path $PSScriptRoot 'visor-session.exe'),
     # Hosted mode: Explorer stays the shell, visor-shell starts from a Run entry.
     [switch] $Hosted,
+    # Hosted mode with visor-wm (tiling, and Omarchy's keys over Explorer's).
+    [switch] $Tiling,
     [switch] $AllowPhysicalMachine
 )
 
@@ -80,10 +86,17 @@ if ($Hosted) {
         Remove-ItemProperty $StateKey -Name PreviousShell -ErrorAction SilentlyContinue
         Write-Host 'Removed the replace-mode shell override; Explorer is the shell again at next sign-in.'
     }
-    $value = "`"$(Join-Path $dir 'visor-shell.exe')`" --mode hosted"
+    $value = "`"$Path`" --mode hosted"
     New-Item $RunKey -Force | Out-Null
     Set-ItemProperty $RunKey -Name $RunValue -Value $value
+    New-Item $StateKey -Force | Out-Null
+    if ($Tiling) {
+        Set-ItemProperty $StateKey -Name Tiling -Value 1 -Type DWord
+    } else {
+        Remove-ItemProperty $StateKey -Name Tiling -ErrorAction SilentlyContinue
+    }
     Write-Host "Run entry for $env:USERNAME set to $value (starts at next sign-in; or run it now)."
+    Write-Host "Tiling (visor-wm) is $(if ($Tiling) { 'on' } else { 'off' })."
     Write-Host 'Undo with uninstall.ps1. Ctrl+Alt+Q quits visor-shell and brings the taskbar back.'
     return
 }

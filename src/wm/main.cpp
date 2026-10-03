@@ -1,20 +1,25 @@
 // visor-wm: the tiling window manager of a Visor desktop (Hyprland's role in
-// Omarchy). Started and supervised by visor-shell in replace mode; can also be
-// run by hand for testing.
+// Omarchy). Started and supervised by visor-shell (always in replace mode,
+// and in hosted mode when tiling is turned on); can also be run by hand.
 //
-//   visor-wm [--config <wm.conf>] [--shell-pid <pid>]
+//   visor-wm [--config <wm.conf>] [--shell-pid <pid>] [--mode auto|replace|hosted]
 //
 // With --shell-pid it exits when that process does, so a restarted shell
 // starts a fresh visor-wm rather than finding a stale one. If a new shell
 // appears within a few seconds (visor-session restarted it), windows on other
 // desktops stay hidden and are handed over to the visor-wm it starts;
 // otherwise (e.g. the session went back to Explorer) every window is shown.
+//
+// --mode hosted means Explorer is the shell: Windows' own keys and desktops
+// are left to it (see WindowManager). The default, auto, looks at who owns
+// the shell window.
 
 #include "common/exitcodes.h"
 #include "common/linkprotocol.h"
 #include "common/log.h"
 #include "wm/config.h"
 #include "wm/manager.h"
+#include "wm/windows.h"
 
 #include <QCommandLineParser>
 #include <QCoreApplication>
@@ -26,6 +31,7 @@
 #include <QWinEventNotifier>
 
 #include <windows.h>
+#include <objbase.h>
 
 #include <memory>
 
@@ -71,8 +77,11 @@ int main(int argc, char *argv[])
                                     QStringLiteral("path"));
     QCommandLineOption shellOption(QStringLiteral("shell-pid"), QStringLiteral("Exit when this process exits."),
                                    QStringLiteral("pid"));
+    QCommandLineOption modeOption(QStringLiteral("mode"), QStringLiteral("auto (default), replace or hosted."),
+                                  QStringLiteral("mode"), QStringLiteral("auto"));
     parser.addOption(configOption);
     parser.addOption(shellOption);
+    parser.addOption(modeOption);
     parser.process(app);
 
     qInfo() << "visor-wm" << VISOR_VERSION << "starting, pid" << QCoreApplication::applicationPid();
@@ -95,10 +104,30 @@ int main(int argc, char *argv[])
         }
     }
 
+    // Hosted (Explorer is the shell) or replace (visor-shell is): Explorer's
+    // desktop window gives it away.
+    const QString modeName = parser.value(modeOption);
+    bool hosted = false;
+    if (modeName == QLatin1String("hosted")) {
+        hosted = true;
+    } else if (modeName == QLatin1String("auto")) {
+        const auto shellWindow = reinterpret_cast<quintptr>(GetShellWindow());
+        hosted = shellWindow
+                 && visor::wm::win::exeName(shellWindow).compare(QLatin1String("explorer.exe"), Qt::CaseInsensitive)
+                        == 0;
+    } else if (modeName != QLatin1String("replace")) {
+        qCritical() << "unknown --mode" << modeName;
+        return visor::exitcode::Refused;
+    }
+    qInfo() << "mode:" << (hosted ? "hosted" : "replace");
+
+    // IVirtualDesktopManager (hosted mode) and ShellExecute want an STA.
+    CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+
     const QString configPath = visor::wm::resolveConfigPath(parser.value(configOption));
     // Destroyed explicitly before the instance mutex is released (below), so
     // its hand-over is written before the next visor-wm reads it.
-    auto manager = std::make_unique<visor::wm::WindowManager>(loadConfig(configPath));
+    auto manager = std::make_unique<visor::wm::WindowManager>(loadConfig(configPath), hosted);
 
     std::unique_ptr<QWinEventNotifier> shellExited;
     QTimer newShellPoll;

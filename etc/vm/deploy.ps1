@@ -16,6 +16,7 @@
 .EXAMPLE
     pwsh etc/vm/deploy.ps1 -Install        # first time: copy + make it the shell
     pwsh etc/vm/deploy.ps1 -Hosted         # copy + install hosted mode (Explorer stays) + start it
+    pwsh etc/vm/deploy.ps1 -Hosted -Tiling # the same, with visor-wm (tiling) on
     pwsh etc/vm/deploy.ps1                 # later: copy + restart the running shell (either mode)
     pwsh etc/vm/deploy.ps1 -Restore        # emergency: back to Explorer, now
 #>
@@ -34,6 +35,10 @@ param(
     # hosted mode on the VM's desktop.
     [Parameter(ParameterSetName = 'Deploy')]
     [switch] $Hosted,
+
+    # With -Hosted: turn tiling (visor-wm) on in hosted mode.
+    [Parameter(ParameterSetName = 'Deploy')]
+    [switch] $Tiling,
 
     # Undo install.ps1 in the VM, stop visor-shell, and start Explorer on the
     # VM's desktop. Copies nothing.
@@ -125,7 +130,8 @@ $vmHelpers = {
     }
 
     # A hosted visor-shell is asked to quit (it puts Explorer's taskbar back
-    # and takes Visor with it); the ask has to come from the user's session.
+    # and takes Visor and visor-wm with it, and visor-session sees a clean
+    # exit); the ask has to come from the user's session.
     function Stop-HostedShell([string] $Dir) {
         if (-not (Get-Process visor-shell -ErrorAction SilentlyContinue)) { return }
         Start-OnDesktop "$Dir\visor-shell.exe" '--quit'
@@ -209,7 +215,7 @@ try {
         # The copied script, so the switch can be passed (-ArgumentList can't).
         Invoke-Command -Session $session -ScriptBlock {
             Set-ExecutionPolicy -Scope Process Bypass -Force
-            & "$using:Target\install.ps1" -Path "$using:Target\visor-session.exe" -Hosted
+            & "$using:Target\install.ps1" -Path "$using:Target\visor-session.exe" -Hosted -Tiling:$using:Tiling
         }
     }
 
@@ -228,7 +234,8 @@ try {
                 if (-not (Get-Process explorer -ErrorAction SilentlyContinue)) { Start-OnDesktop 'C:\Windows\explorer.exe' }
                 Start-Sleep -Seconds 3
             }
-            Start-OnDesktop "$using:Target\visor-shell.exe" '--mode hosted'
+            # As the Run entry does: visor-session supervises visor-shell.
+            Start-OnDesktop "$using:Target\visor-session.exe" '--mode hosted'
         }
     } elseif ($installed -and $wasRunning) {
         # Restart onto the new build: Winlogon relaunches the shell once

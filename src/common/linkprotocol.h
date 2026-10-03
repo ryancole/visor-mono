@@ -38,7 +38,8 @@
 // to visor-wm's window (class kWmClass).
 //   visor-wm -> shell -> Visor:
 //     {"type":"workspaces","workspaces":[Desktop...],"active":index,"pid":n}
-//     {"type":"bindings","bindings":[Binding...]}   (the key bindings, for the cheat sheet)
+//                                                   (empty under Explorer: the desktops are Windows')
+//     {"type":"bindings","bindings":[Binding...]}   (the key bindings visor-wm holds, for the cheat sheet)
 //     {"type":"visor.command","name":"launcher"}    (a `visor` binding was pressed)
 //   Visor -> shell -> visor-wm:
 //     {"type":"workspace.activate","index":n}

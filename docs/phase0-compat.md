@@ -64,6 +64,22 @@ Phase 8, same build. Tested with `pwsh etc/vm/deploy.ps1 -Hosted` after Ctrl+Alt
 | Menu's quit row | Right-click the button | ✅ | Reads "Quit Visor" instead of "Quit to Explorer" |
 | Ctrl+Alt+Q restores the taskbar | | ✅ | Shell and Visor exit, auto-hide off again, the recorded state removed; the work area returns to 0,0–1920,1032 |
 | Clean restart from the host | `deploy.ps1` with a hosted shell running | ✅ | `visor-shell --quit` (a `WM_CLOSE` to the link window), then a fresh start |
-| Crash | `Stop-Process visor-shell` | ⚠️ | Nothing restarts it; Visor stays up as a plain bar and reconnects when the shell is started again (no second Visor). The taskbar stays auto-hidden, the record survives, the next run keeps it and its clean exit restores the original |
+| Crash | `Stop-Process visor-shell` | ✅ | Phase 8: nothing restarted it; Visor stayed up as a plain bar and reconnected when the shell was started again. Phase 9: the Run entry runs `visor-session --mode hosted`, which restarted it a second later; Visor reconnected (no second Visor), visor-wm handed over to the one the new shell started, the taskbar stayed auto-hidden, the record survived and the next clean exit restored the original |
 | Back to replace mode | `deploy.ps1 -Install`, then stop explorer.exe | ✅ | The Run entry goes, the Shell override returns, Winlogon starts the HKCU shell |
-| visor-wm under Explorer | | | Not tested |
+
+### Tiling under Explorer (Phase 9)
+
+`deploy.ps1 -Hosted -Tiling`, same build, console session (no audio device).
+
+| Check | How | Result | Notes |
+| --- | --- | --- | --- |
+| visor-wm starts and tiles | Open Notepad, Super+Return | ✅ | `wm.log`: "mode: hosted", "21 key bindings, 17 of them through the keyboard hook", 16 "left to Windows". Both windows tile under the bar with the gaps; frames end at y=1070 (work area bottom 1080, gaps_out 10). A third window splits the left column; Super+W closes it; Super+V floats the terminal centred and tiles it back |
+| Volume key shows Windows' flyout | VK_VOLUME_UP (keybd_event, captured in the same script) | ✅ | Windows 11's flyout (at 0, no audio device), not Visor's OSD |
+| Alt+Tab is Windows' | Alt held, Tab | ✅ | Windows' switcher with its previews |
+| Win+N is Windows' | Win+N | ✅ | Windows' Notification Center, and it isn't tiled |
+| Windows desktops | Win+Ctrl+D, open Notepad, Win+Ctrl+Left | ✅ | The new desktop is empty and the bar shows no pills; Notepad tiles alone there ("on Windows desktop 957c…", "desktop 2"); back on the first, the Notepad + Terminal layout is as it was |
+| Win+arrows move focus | Win+Right from Notepad | ✅ | "SUPER+right -> movefocus r"; the terminal gets the accent border and the caret |
+| visor-wm crash | `Stop-Process visor-wm` | ✅ | visor-shell restarted it a second later; it adopted the two windows into the same tiles |
+| visor-shell crash | `Stop-Process visor-shell` | ✅ | See "Crash" above |
+| Ctrl+Alt+Q | | ✅ | visor-shell, Visor, visor-wm and visor-session all exit; auto-hide off again and the record removed |
+| Launched-from-background windows | `Start-Process notepad` over PowerShell Direct | ⚠️ | Not ours: a window started by a background process can't take the foreground, its taskbar button flashes, and Explorer keeps an auto-hidden taskbar up while one flashes. It hides once the window is clicked. Apps started from the launcher or a key don't do this |

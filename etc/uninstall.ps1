@@ -47,7 +47,8 @@ if ($run) {
     Remove-ItemProperty $RunKey -Name $RunValue
     Write-Host "Run entry removed for $env:USERNAME ($run)."
     if ((Get-Process visor-shell -ErrorAction SilentlyContinue) -and $run -match '^"([^"]+)"') {
-        & $Matches[1] --quit
+        # The entry names visor-session; visor-shell is next to it.
+        & (Join-Path (Split-Path -Parent $Matches[1]) 'visor-shell.exe') --quit
         $deadline = (Get-Date).AddSeconds(5)
         while ((Get-Date) -lt $deadline -and (Get-Process visor-shell -ErrorAction SilentlyContinue)) {
             Start-Sleep -Milliseconds 250

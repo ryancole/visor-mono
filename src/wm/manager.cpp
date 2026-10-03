@@ -130,9 +130,10 @@ double monitorScale(HMONITOR monitor)
 
 } // namespace
 
-WindowManager::WindowManager(Config config, QObject *parent)
+WindowManager::WindowManager(Config config, bool hosted, QObject *parent)
     : QObject(parent)
     , m_config(std::move(config))
+    , m_hosted(hosted)
 {
     m_accent = win::accentColor();
     g_instance = this;
@@ -191,8 +192,10 @@ WindowManager::WindowManager(Config config, QObject *parent)
             qWarning() << "SetWinEventHook failed for event" << Qt::hex << from << "error" << GetLastError();
     }
 
-    // Desktops and hidden windows a previous visor-wm left behind.
-    restoreState();
+    // Desktops and hidden windows a previous visor-wm left behind. (Hosted,
+    // the desktops are Windows' and nothing is ever hidden.)
+    if (!m_hosted)
+        restoreState();
 
     // Adopt what is already open, bottom of the z-order first so the
     // longest-standing windows get the biggest tiles.
@@ -207,7 +210,8 @@ WindowManager::WindowManager(Config config, QObject *parent)
     for (quintptr w : std::as_const(existing))
         consider(w);
     focusChanged(win::foreground());
-    qInfo() << "tiling" << m_managed.size() << "windows on" << m_monitors.size() << "monitors";
+    qInfo() << "tiling" << m_managed.size() << "windows on" << m_monitors.size() << "monitors"
+            << (m_hosted ? "under Explorer" : "as the shell");
     registerBindings();
     sendState();
     sendBindings();
@@ -311,6 +315,13 @@ void WindowManager::handleEvent(unsigned event, quintptr hwnd)
         untrack(hwnd);
         break;
     case EVENT_OBJECT_CLOAKED:
+        if (m_hosted && m_desktopOf.contains(hwnd) && !win::onCurrentDesktop(hwnd)) {
+            // The user switched Windows desktops, or moved the window to
+            // another one (Task View): it keeps its tile on that desktop.
+            syncDesktop(hwnd);
+            break;
+        }
+        [[fallthrough]];
     case EVENT_SYSTEM_MINIMIZESTART:
         if (m_managed.contains(hwnd))
             unmanage(hwnd);
@@ -368,7 +379,7 @@ std::intptr_t WindowManager::handleMessage(void *window, unsigned msg, std::uint
         if (type == QLatin1String("quit")) {
             // visor-shell is handing the session to Explorer: show everything.
             QMetaObject::invokeMethod(QCoreApplication::instance(), &QCoreApplication::quit, Qt::QueuedConnection);
-        } else if (type == QLatin1String("workspace.activate")) {
+        } else if (type == QLatin1String("workspace.activate") && !m_hosted) {
             const int index = m.value(QStringLiteral("index")).toInt();
             // From the event loop, not inside the shell's SendMessage.
             QMetaObject::invokeMethod(this, [this, index] { activateDesktop(index); }, Qt::QueuedConnection);
@@ -459,10 +470,15 @@ int WindowManager::indexOf(const Desktop *desktop) const
 
 void WindowManager::consider(quintptr hwnd)
 {
+    // Hosted: a window on another of Windows' desktops is cloaked, not gone.
+    if (m_hosted && m_desktopOf.contains(hwnd) && win::isCloaked(hwnd) && !win::onCurrentDesktop(hwnd))
+        return;
     QString reason;
     win::Kind kind = win::classify(hwnd, m_config, &reason);
     // togglefloating beats rules and heuristics, for as long as the window lives.
     if (kind != win::Kind::Ignore) {
+        if (m_hosted)
+            syncDesktop(hwnd);
         if (const auto it = m_tileOverride.constFind(hwnd); it != m_tileOverride.cend())
             kind = *it ? win::Kind::Tile : win::Kind::Float;
         track(hwnd);
@@ -481,8 +497,10 @@ void WindowManager::track(quintptr hwnd)
     if (m_desktopOf.contains(hwnd))
         return;
     // A dialog belongs to its owner's desktop; anything else opens on the
-    // current one, as in Windows.
-    Desktop *desktop = m_desktopOf.value(win::rootOwner(hwnd), current());
+    // current one, as in Windows (hosted: on whichever Windows says).
+    Desktop *desktop = m_desktopOf.value(win::rootOwner(hwnd), nullptr);
+    if (!desktop)
+        desktop = m_hosted ? desktopFor(hwnd) : current();
     m_desktopOf.insert(hwnd, desktop);
     if (!win::owner(hwnd))
         m_stateTimer.start(); // window counts changed
@@ -490,8 +508,11 @@ void WindowManager::track(quintptr hwnd)
 
 void WindowManager::untrack(quintptr hwnd)
 {
-    if (m_desktopOf.remove(hwnd))
+    if (m_desktopOf.remove(hwnd)) {
         m_stateTimer.start();
+        if (m_hosted)
+            pruneDesktops();
+    }
 }
 
 void WindowManager::manage(quintptr hwnd)
@@ -705,9 +726,70 @@ void WindowManager::refreshAccent()
 
 // ---- Desktops -------------------------------------------------------------
 
+WindowManager::Desktop *WindowManager::desktopFor(quintptr hwnd)
+{
+    const QUuid id = win::desktopId(hwnd);
+    if (id.isNull())
+        return current();
+    for (const auto &desktop : m_desktops) {
+        if (desktop->id == id)
+            return desktop.get();
+    }
+    m_desktops.push_back(std::make_unique<Desktop>());
+    m_desktops.back()->id = id;
+    return m_desktops.back().get();
+}
+
+void WindowManager::syncDesktop(quintptr hwnd)
+{
+    Desktop *desktop = desktopFor(hwnd);
+    Desktop *old = m_desktopOf.value(hwnd);
+    if (old && old != desktop) {
+        // Moved to another desktop in Windows: out of its layout here, into
+        // the one there (arranged when that desktop is shown).
+        m_desktopOf.insert(hwnd, desktop);
+        if (const auto it = m_managed.find(hwnd); it != m_managed.end()) {
+            Workspace &from = workspaceOf(*it);
+            from.layout.remove(hwnd);
+            if (from.lastFocused == hwnd)
+                from.lastFocused = 0;
+            m_tiles.remove(hwnd);
+            m_placed.remove(hwnd);
+            if (it->desktop == current())
+                arrange(it->monitor);
+            it->desktop = desktop;
+            Workspace &to = desktop->monitors[it->monitor];
+            to.layout.insert(hwnd, to.layout.contains(to.lastFocused) ? to.lastFocused : 0,
+                             m_monitors.value(it->monitor).work, m_config.dwindle);
+        }
+        qInfo().noquote() << "moved to another Windows desktop:" << win::exeName(hwnd)
+                          << QLatin1Char('"') + win::title(hwnd) + QLatin1Char('"');
+    }
+    // A window on screen is on the current desktop: follow Windows there.
+    if (desktop != current() && !win::isCloaked(hwnd)) {
+        m_current = indexOf(desktop);
+        m_tiles.clear();
+        qInfo() << "on Windows desktop" << desktop->id.toString(QUuid::WithoutBraces);
+        arrangeAll();
+    }
+    pruneDesktops();
+}
+
+void WindowManager::pruneDesktops()
+{
+    Desktop *keep = current();
+    for (auto it = m_desktops.begin(); it != m_desktops.end();) {
+        bool inUse = it->get() == keep;
+        for (auto w = m_desktopOf.cbegin(); !inUse && w != m_desktopOf.cend(); ++w)
+            inUse = w.value() == it->get();
+        it = inUse ? it + 1 : m_desktops.erase(it);
+    }
+    m_current = indexOf(keep);
+}
+
 void WindowManager::activateDesktop(int index)
 {
-    if (index < 0 || index >= int(m_desktops.size()) || index == m_current)
+    if (m_hosted || index < 0 || index >= int(m_desktops.size()) || index == m_current)
         return;
     Desktop *from = current();
     Desktop *to = m_desktops[size_t(index)].get();
@@ -990,8 +1072,10 @@ void WindowManager::restoreState()
 
 QJsonObject WindowManager::desktopState() const
 {
+    // Hosted: Windows' desktops are Windows' to show (Task View), so Visor
+    // gets none and draws no pills.
     QJsonArray desktops;
-    for (size_t i = 0; i < m_desktops.size(); ++i) {
+    for (size_t i = 0; !m_hosted && i < m_desktops.size(); ++i) {
         int windows = 0;
         for (auto it = m_desktopOf.cbegin(); it != m_desktopOf.cend(); ++it) {
             if (it.value() == m_desktops[i].get() && !win::owner(it.key()))
@@ -1019,6 +1103,8 @@ void WindowManager::sendBindings()
 {
     QJsonArray bindings;
     for (const Binding &b : std::as_const(m_config.bindings)) {
+        if (leftToWindows(b))
+            continue;
         bindings.append(QJsonObject{
             {QStringLiteral("keys"), b.name},
             {QStringLiteral("description"), b.description},
@@ -1048,6 +1134,48 @@ void WindowManager::sendToShell(const QJsonObject &message)
 
 // ---- Key bindings -----------------------------------------------------------
 
+bool WindowManager::leftToWindows(const Binding &b) const
+{
+    if (!m_hosted)
+        return false;
+    // A bare Win press opens Start; keys with no modifier (the volume and
+    // media keys) are acted on by Windows itself.
+    if (b.release || b.modifiers == 0)
+        return true;
+    // Windows' keys for what Visor leaves to Windows under Explorer: search,
+    // the power-user menu, Run, the Notification Center, the Alt+Tab
+    // switcher, and its own virtual desktops. Win+arrows are not here: Snap
+    // would pull a window out of its tile, so with tiling on they move
+    // focus and swap, as in Omarchy. Win+W/V/F/K/E are Explorer's too, but
+    // the hook takes them for the tiling bindings, as it does without
+    // Explorer.
+    struct Key
+    {
+        quint32 modifiers;
+        quint32 key;
+    };
+    static constexpr Key kWindowsKeys[] = {
+        {MOD_WIN, 'S'},
+        {MOD_WIN, 'X'},
+        {MOD_WIN, 'R'},
+        {MOD_WIN, 'N'},
+        {MOD_ALT, VK_TAB},
+        {MOD_ALT | MOD_SHIFT, VK_TAB},
+        {MOD_WIN | MOD_CONTROL, 'D'},
+        {MOD_WIN | MOD_CONTROL, VK_F4},
+        {MOD_WIN | MOD_CONTROL, VK_LEFT},
+        {MOD_WIN | MOD_CONTROL, VK_RIGHT},
+    };
+    for (const Key &k : kWindowsKeys) {
+        if (b.modifiers == k.modifiers && b.key == k.key)
+            return true;
+    }
+    // Our desktops are off: Windows' are there.
+    const QString &d = b.dispatcher;
+    return d == QLatin1String("workspace") || d == QLatin1String("movetoworkspace")
+           || d == QLatin1String("movetoworkspacesilent") || d == QLatin1String("closeworkspace");
+}
+
 void WindowManager::registerBindings()
 {
     const auto hwnd = static_cast<HWND>(m_hwnd);
@@ -1057,9 +1185,14 @@ void WindowManager::registerBindings()
     // window has focus. Keys Windows keeps for itself go to the hook.
     const QList<Binding> &bindings = m_config.bindings;
     QList<KeyHook::Key> hooked;
+    QStringList windows;
     for (qsizetype i = 0; i < bindings.size(); ++i) {
         const Binding &b = bindings[i];
         const int id = int(i + 1);
+        if (leftToWindows(b)) {
+            windows << b.name;
+            continue;
+        }
         // Release bindings only exist in the hook (hotkeys fire on press).
         // Alt+Tab too: Windows switches windows on it itself, with no UI
         // without Explorer; only the hook sees the key before Windows does
@@ -1073,7 +1206,10 @@ void WindowManager::registerBindings()
     }
     m_registeredBindings = bindings.size();
     m_keyHook->setKeys(hooked);
-    qInfo() << m_registeredBindings << "key bindings," << hooked.size() << "of them through the keyboard hook";
+    qInfo() << m_registeredBindings - windows.size() << "key bindings," << hooked.size()
+            << "of them through the keyboard hook";
+    if (!windows.isEmpty())
+        qInfo().noquote() << "left to Windows:" << windows.join(QLatin1String(", "));
 }
 
 void WindowManager::unregisterBindings()
@@ -1097,6 +1233,8 @@ void WindowManager::dispatch(const Binding &binding)
                                            : Direction::Down;
     };
 
+    if (leftToWindows(binding))
+        return;
     qInfo().noquote() << binding.name << "->" << d << binding.argument;
     if (d == QLatin1String("exec")) {
         visor::run(binding.argument);

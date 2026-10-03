@@ -3,6 +3,7 @@
 #include "wm/layout.h"
 
 #include <QString>
+#include <QUuid>
 
 namespace visor::wm {
 
@@ -51,6 +52,16 @@ void close(quintptr hwnd);
 void raise(quintptr hwnd);
 
 bool isVisible(quintptr hwnd);
+// Hidden by DWM while still "visible" to Win32: windows on another of
+// Windows' virtual desktops, and suspended Store apps.
+bool isCloaked(quintptr hwnd);
+// Windows' own virtual desktops (hosted mode), through the documented
+// IVirtualDesktopManager. The desktop the window is on, or a null id when
+// Windows doesn't say (the shell's windows, windows pinned to every desktop).
+QUuid desktopId(quintptr hwnd);
+// False when the window is on another of Windows' desktops (unknown counts
+// as on this one).
+bool onCurrentDesktop(quintptr hwnd);
 quint32 processId(quintptr hwnd);
 quintptr owner(quintptr hwnd);     // 0 if unowned
 quintptr rootOwner(quintptr hwnd); // the end of the owner chain (itself if unowned)

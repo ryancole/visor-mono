@@ -2,10 +2,12 @@
 
 #include "wm/config.h"
 
+#include <QDebug>
 #include <QFileInfo>
 
 #include <windows.h>
 #include <dwmapi.h>
+#include <shobjidl.h>
 
 namespace visor::wm::win {
 
@@ -20,10 +22,39 @@ HWND toHwnd(quintptr hwnd)
     return reinterpret_cast<HWND>(hwnd);
 }
 
-bool isCloaked(HWND hwnd)
+bool cloaked(HWND hwnd)
 {
-    DWORD cloaked = 0;
-    return SUCCEEDED(DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked))) && cloaked;
+    DWORD state = 0;
+    return SUCCEEDED(DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &state, sizeof(state))) && state;
+}
+
+// Explorer's shell windows (the desktop, its workers and the taskbars):
+// top-level and unowned, so they would otherwise count as floating app
+// windows, and killactive would send WM_CLOSE to the taskbar.
+bool isExplorerShellWindow(HWND hwnd)
+{
+    if (hwnd == GetShellWindow())
+        return true;
+    wchar_t cls[64] = {};
+    GetClassNameW(hwnd, cls, int(std::size(cls)));
+    return wcscmp(cls, L"Progman") == 0 || wcscmp(cls, L"WorkerW") == 0 || wcscmp(cls, L"Shell_TrayWnd") == 0
+           || wcscmp(cls, L"Shell_SecondaryTrayWnd") == 0;
+}
+
+// The documented virtual-desktop interface: which desktop a window is on,
+// and whether that is the one on screen. Nothing more is public (no list of
+// desktops, no switching), which is all hosted mode needs: the desktops
+// themselves are Windows' to manage there.
+IVirtualDesktopManager *virtualDesktops()
+{
+    static IVirtualDesktopManager *manager = [] {
+        IVirtualDesktopManager *m = nullptr;
+        const HRESULT hr = CoCreateInstance(__uuidof(VirtualDesktopManager), nullptr, CLSCTX_ALL, IID_PPV_ARGS(&m));
+        if (FAILED(hr))
+            qWarning() << "IVirtualDesktopManager unavailable, hr" << Qt::hex << ulong(hr);
+        return m;
+    }();
+    return manager;
 }
 
 DWORD processId(HWND hwnd)
@@ -132,7 +163,7 @@ Kind classify(quintptr window, const Config &config, QString *reason)
         why("not top-level");
         return Kind::Ignore;
     }
-    if (processId(hwnd) == GetCurrentProcessId() || isCloaked(hwnd)) {
+    if (processId(hwnd) == GetCurrentProcessId() || cloaked(hwnd)) {
         why("ours or cloaked");
         return Kind::Ignore;
     }
@@ -140,6 +171,11 @@ Kind classify(quintptr window, const Config &config, QString *reason)
     const LONG_PTR ex = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
     if ((style & WS_CHILD) || (!(ex & WS_EX_APPWINDOW) && (ex & (WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE)))) {
         why("tool window");
+        return Kind::Ignore;
+    }
+
+    if (isExplorerShellWindow(hwnd)) {
+        why("Explorer's shell window");
         return Kind::Ignore;
     }
 
@@ -210,6 +246,29 @@ bool isFullscreen(quintptr window)
 bool exists(quintptr hwnd)
 {
     return IsWindow(toHwnd(hwnd));
+}
+
+bool isCloaked(quintptr hwnd)
+{
+    return cloaked(toHwnd(hwnd));
+}
+
+QUuid desktopId(quintptr hwnd)
+{
+    GUID id{};
+    IVirtualDesktopManager *manager = virtualDesktops();
+    if (!manager || FAILED(manager->GetWindowDesktopId(toHwnd(hwnd), &id)))
+        return {};
+    return QUuid(id);
+}
+
+bool onCurrentDesktop(quintptr hwnd)
+{
+    BOOL current = TRUE;
+    IVirtualDesktopManager *manager = virtualDesktops();
+    if (!manager || FAILED(manager->IsWindowOnCurrentVirtualDesktop(toHwnd(hwnd), &current)))
+        return true;
+    return current;
 }
 
 void unmaximize(quintptr hwnd)

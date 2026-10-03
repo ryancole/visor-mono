@@ -12,6 +12,7 @@
 #include <QSize>
 #include <QString>
 #include <QTimer>
+#include <QUuid>
 
 #include <cstdint>
 #include <map>
@@ -37,15 +38,24 @@ namespace visor::wm {
 // replaced, see handOver) picks them up again instead of losing them; a
 // clean exit shows every window straight away.
 //
+// Hosted mode (Explorer is the shell): Windows' own desktops are there, so
+// ours are off. Each Desktop then stands for one of Windows' (by its id from
+// IVirtualDesktopManager), keeping that desktop's layouts while the user is
+// elsewhere; Windows cloaks the windows on other desktops, which is how a
+// switch and a window moved in Task View reach us. Nothing is hidden or
+// recorded, and Visor is sent no desktops to show.
+//
 // Key bindings from the config are global hotkeys (RegisterHotKey) on the
 // hidden window, or, for keys Windows reserves, caught by a KeyHook; each
-// runs a Hyprland-style dispatcher on the focused window.
+// runs a Hyprland-style dispatcher on the focused window. In hosted mode the
+// keys Windows acts on itself are left to it (leftToWindows).
 class WindowManager : public QObject
 {
     Q_OBJECT
 
 public:
-    explicit WindowManager(Config config, QObject *parent = nullptr);
+    // hosted: Explorer is the shell (see above).
+    WindowManager(Config config, bool hosted, QObject *parent = nullptr);
     // Shows windows hidden on other desktops (unless handed over) and puts
     // window border colours back to the system default.
     ~WindowManager() override;
@@ -81,6 +91,7 @@ private:
     {
         std::map<QString, Workspace> monitors; // by monitor device name
         quintptr lastFocused = 0;              // on any monitor
+        QUuid id;                              // Windows' desktop (hosted mode)
     };
     struct Managed
     {
@@ -129,6 +140,15 @@ private:
     void refreshAccent();
 
     // Desktops.
+    // Hosted mode: the Desktop for the Windows desktop `hwnd` is on (made on
+    // first sight), the current one if Windows doesn't say.
+    Desktop *desktopFor(quintptr hwnd);
+    // Hosted mode: moves `hwnd` to the Desktop Windows now has it on, and
+    // makes that the current one if the window is on screen (so a switch in
+    // Windows is followed as soon as one of its windows shows).
+    void syncDesktop(quintptr hwnd);
+    // Hosted mode: forgets Windows desktops no window is on any more.
+    void pruneDesktops();
     void activateDesktop(int index);
     void newDesktop();
     void closeDesktop();
@@ -146,6 +166,10 @@ private:
     void sendBindings();
     void sendToShell(const QJsonObject &message);
 
+    // Hosted mode: keys Windows acts on itself under Explorer (the bare Win
+    // press, Win+S/X/R/N, Alt+Tab, the media keys, its desktop keys), and
+    // the desktop dispatchers. Those bindings are neither bound nor shown.
+    bool leftToWindows(const Binding &binding) const;
     void registerBindings();
     void unregisterBindings();
     void dispatch(const Binding &binding);
@@ -161,6 +185,7 @@ private:
     quintptr neighbor(const Rect &from, Direction direction, quintptr exclude) const;
 
     Config m_config;
+    const bool m_hosted;
     quint32 m_accent = 0x0078d4; // Windows' accent colour, 0xRRGGBB
     void *m_hwnd = nullptr; // hidden window: broadcasts, hotkeys, messages from the shell
     QList<void *> m_hooks;
