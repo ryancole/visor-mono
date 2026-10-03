@@ -184,10 +184,10 @@ Windows 11's virtual desktops live in Explorer, so they're gone in replace mode.
 
 - Create as many as you like. They're named "Desktop 1", "Desktop 2"..., and each one covers every monitor.
 - Visor's task list shows only the current desktop's windows, which is Windows' default.
-- The bar shows them as numbered pills next to Start, even when there's only one (as Windows always keeps Task View on the taskbar). Click one to switch, or scroll over them.
+- The bar shows them next to Start the way Omarchy shows workspaces: the current one as a dot in the accent colour, the others as numbers (dimmer when empty), even when there's only one (as Windows always keeps Task View on the taskbar). Click one to switch, or scroll over them.
 - Windows has no key for moving a window to another desktop (it uses Task View), so the last row is our addition.
 - Windows on other desktops are hidden. Desktops survive `visor-wm` restarting (after a crash, a redeploy, or visor-shell restarting): the next `visor-wm` picks up the desktops and their hidden windows. If the session goes back to Explorer (Ctrl+Alt+Q, or visor-shell not coming back), every window is shown first, so none is ever lost.
-- **Under Explorer** Windows' own desktops are there (Win+Ctrl+D, Task View), so these are off and the bar shows no pills. `visor-wm` tiles each Windows desktop on its own: it asks Windows which desktop a window is on (`IVirtualDesktopManager`), keeps a layout per desktop, and follows a switch when the new desktop's windows appear, so a layout is as you left it when you come back. A window moved to another desktop in Task View joins the layout there.
+- **Under Explorer** Windows' own desktops are there (Win+Ctrl+D, Task View), so these are off and the bar shows no desktops. `visor-wm` tiles each Windows desktop on its own: it asks Windows which desktop a window is on (`IVirtualDesktopManager`), keeps a layout per desktop, and follows a switch when the new desktop's windows appear, so a layout is as you left it when you come back. A window moved to another desktop in Task View joins the layout there.
 
 
 ### Window switcher
