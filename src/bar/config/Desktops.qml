@@ -2,13 +2,13 @@ import QtQuick
 import Visor
 
 // Virtual desktops (run by visor-wm), as numbered pills; the one on screen is
-// highlighted. Like Windows, nothing shows until there is a second desktop
-// (Win+Ctrl+D).
+// highlighted. Shown even with one desktop, as Windows always keeps Task View
+// on the taskbar (and Omarchy its workspace numbers); Win+Ctrl+D adds one.
 //
 // Click: switch to it. Scroll: previous / next.
 Row {
     id: desktops
-    visible: Workspaces.available && Workspaces.count > 1
+    visible: Workspaces.available
     spacing: 4
 
     Repeater {
