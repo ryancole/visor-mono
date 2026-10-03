@@ -1,5 +1,7 @@
 #include "services/systemclock.h"
 
+#include <windows.h>
+
 namespace {
 
 QDateTime truncate(const QDateTime &dt, SystemClock::Precision precision)
@@ -21,6 +23,30 @@ qint64 periodMs(SystemClock::Precision precision)
     case SystemClock::Hours: return 60 * 60 * 1000;
     }
     return 1000;
+}
+
+// The time in the user's Windows format, as the taskbar shows it: the short
+// format, or the long one when seconds are wanted.
+QString windowsTime(const QDateTime &dt, SystemClock::Precision precision)
+{
+    wchar_t format[80] = {};
+    const bool longFormat = precision == SystemClock::Seconds;
+    if (!longFormat && !GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_SSHORTTIME, format, ARRAYSIZE(format)))
+        return dt.toString(QStringLiteral("HH:mm"));
+
+    const QTime t = dt.time();
+    SYSTEMTIME st = {};
+    st.wYear = WORD(dt.date().year());
+    st.wMonth = WORD(dt.date().month());
+    st.wDay = WORD(dt.date().day());
+    st.wHour = WORD(t.hour());
+    st.wMinute = WORD(t.minute());
+    st.wSecond = WORD(t.second());
+
+    wchar_t text[80] = {};
+    if (!GetTimeFormatEx(LOCALE_NAME_USER_DEFAULT, 0, &st, longFormat ? nullptr : format, text, ARRAYSIZE(text)))
+        return dt.toString(QStringLiteral("HH:mm"));
+    return QString::fromWCharArray(text);
 }
 
 } // namespace
@@ -65,6 +91,13 @@ void SystemClock::tick()
     if (truncated != m_date) {
         m_date = truncated;
         emit dateChanged();
+    }
+    // Every tick, not only on a new date, so a format changed in Settings
+    // shows by the next boundary.
+    const QString time = windowsTime(truncated, m_precision);
+    if (time != m_time) {
+        m_time = time;
+        emit timeChanged();
     }
 
     // Re-arm for the next boundary, recomputed from the real clock each time

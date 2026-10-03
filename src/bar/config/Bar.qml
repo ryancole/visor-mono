@@ -104,10 +104,30 @@ PanelWindow {
             Icon { visible: Privacy.location; glyph: "\uE707"; color: Theme.accent }
         }
 
-        Label {
+        // The time in Windows' own format (12- or 24-hour as Region says).
+        // Click: Windows' Date and Time dialog (timedate.cpl), which works
+        // without Explorer, unlike the taskbar's calendar flyout.
+        Rectangle {
             anchors.verticalCenter: parent.verticalCenter
-            text: Qt.formatDateTime(clock.date, "ddd d MMM   HH:mm")
-            font.weight: Font.DemiBold
+            width: clockLabel.implicitWidth + 16
+            height: 24
+            radius: 6
+            color: clockMouse.containsMouse ? Theme.surface : "transparent"
+
+            Label {
+                id: clockLabel
+                anchors.centerIn: parent
+                text: Qt.formatDateTime(clock.date, "ddd d MMM") + "   " + clock.time
+                font.weight: Font.DemiBold
+            }
+
+            MouseArea {
+                id: clockMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: Shell.run("control.exe timedate.cpl")
+            }
         }
 
         // Click: the next layout, as Win+Space.

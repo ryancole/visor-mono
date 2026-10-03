@@ -94,6 +94,7 @@ Checked live on Ryan's desktop (replace mode, build 26300, 3440x1440, no battery
 | Centre indicators | Look at the bar | ✅ | Only the clock: one layout, no restart pending, nothing using the mic, so nothing shows, as intended |
 | Quick Settings | Win+A, or click the cluster | ✅ | `wm.log` "SUPER+A -> visor quicksettings"; the popup under the cluster: Wi-Fi and Bluetooth buttons (both radios present, off), the volume slider at 50 with "Speakers (HyperX Cloud MIX 2)", and the "Ethernet" line. No brightness slider (desktop), no battery tile |
 | Do not disturb | The moon in the Notification Center; the setting flipped from a script in the session | ✅ | `visor.log`: "RegistryWatch: change under ...Notifications\\Settings", "do not disturb on", the bell becomes a moon; off again three seconds later. (A write from Claude's own shell never reached the real registry: see CLAUDE.md) |
+| Clock format and click | Look at the bar; click the clock | | Expect "Fri 2 Oct   10:49 PM" (en-US, `h:mm tt`) and the Date and Time dialog. `control.exe timedate.cpl` checked to open without Explorer on build 26300 |
 | Keyboard layout | Needs a second layout | | Not tested: one layout installed |
 | Restart required | Needs a pending Windows Update | | Not tested |
 | Mic / camera in use | Start a call or recording | | Not tested |
