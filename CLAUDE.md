@@ -14,15 +14,33 @@ plainly why you recommend something else.
 
 ## Testing
 
-- Never install or test the shell on the host. Everything runs in the
-  Hyper-V VM `visor-test` (`etc/vm/*.ps1`): build with
-  `pwsh etc/build.ps1 release`, deploy with `pwsh etc/vm/deploy.ps1`, look
-  with `etc/vm/screenshot.ps1` (`-Inside` during an Enhanced Session),
-  drive it with `etc/vm/input.ps1` and `etc/vm/run.ps1`.
-- Don't sign the VM out or restart it unasked; there is no auto sign-in.
-- Test every feature in the VM with screenshots before calling it done, and
-  update `README.md`, `docs/design.md`, `docs/phase0-compat.md` and
-  `src/bar/README.md` with it.
+- **visor is Ryan's daily shell on the host** (since 2026-10-02):
+  replace mode, installed from `%LOCALAPPDATA%\Programs\visor` with
+  `install.ps1 -AllowPhysicalMachine`, so visor-session is the Winlogon
+  shell for his user and Explorer is the fallback. This is a live
+  session, not a test box: a crash is Ryan's desktop breaking. Prefer
+  small, reversible changes, and never break Ctrl+Alt+Q, the watchdog's
+  Explorer fallback, Shift-at-sign-in or the safe-mode file: they are the
+  way back.
+- **Ryan does the session-level steps himself**: running the install or
+  uninstall scripts, changing the Winlogon `Shell` value, signing out,
+  killing Explorer or the shell, and switching modes. Give him the
+  commands; don't run them unasked.
+- Host loop: build with `pwsh etc/build.ps1 release`, then Ryan quits to
+  Explorer (Ctrl+Alt+Q), copies `build/release` over the install folder
+  and ends `explorer.exe` from Task Manager, which makes Winlogon start
+  the shell again (or signs out and in). Logs are in
+  `%LOCALAPPDATA%\visor-shell\logs\`. Check the result with a screenshot
+  before calling it done. Hosted mode still works on the host for a
+  quick look (`visor-shell --mode hosted` from a build dir, Ctrl+Alt+Q
+  to stop).
+- The Hyper-V VM `visor-test` (`etc/vm/*.ps1`: `deploy.ps1`,
+  `screenshot.ps1`, `input.ps1`, `run.ps1`) is for anything too risky to
+  try live first: sign-in, the startup runner, the watchdog, Winlogon.
+  It is usually shut down; ask before starting it, and don't sign it out
+  or restart it unasked (no auto sign-in).
+- Update `README.md`, `docs/design.md`, `docs/phase0-compat.md` and
+  `src/bar/README.md` with every feature.
 
 ## Code
 
