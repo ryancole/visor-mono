@@ -15,6 +15,11 @@ QtObject {
     readonly property color subtext: Themes.subtext
     readonly property color accent: Themes.accent
 
+    // Windows 11's Start logo: blue whatever the accent, lighter in dark
+    // mode, as on the taskbar (top-left to bottom-right).
+    readonly property color startLogoFrom: Themes.light ? "#1E9DF1" : "#6CCBFF"
+    readonly property color startLogoTo: Themes.light ? "#0063B1" : "#1A86E0"
+
     readonly property string font: "Segoe UI Variable Text"
     readonly property string iconFont: "Segoe Fluent Icons"
     readonly property int fontSize: 13

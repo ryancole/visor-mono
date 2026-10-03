@@ -109,7 +109,7 @@ Without Explorer, nothing would start the programs Windows runs at sign-in. In r
 
 ## Launcher and menus
 
-These are QML in Visor ([`src/bar/config`](src/bar/config): `Launcher.qml`, `SystemMenu.qml`, `CheatSheet.qml`), opened by key bindings in `wm.conf` that visor-wm passes to Visor (`bindd = SUPER, S, Launcher, visor, launcher`), or from the button at the left of the bar.
+These are QML in Visor ([`src/bar/config`](src/bar/config): `Launcher.qml`, `SystemMenu.qml`, `CheatSheet.qml`), opened by key bindings in `wm.conf` that visor-wm passes to Visor (`bindd = SUPER, S, Launcher, visor, launcher`), or from the button at the left of the bar, which shows Windows' Start logo.
 
 | Keys | Action |
 | --- | --- |
@@ -149,7 +149,7 @@ Windows shows toasts, keeps them in the Notification Center and puts a flyout on
 
 The bar's layout is Omarchy's: the launcher and desktops on the left, the clock and status indicators in the centre, the tray and hardware on the right. What fills it is Windows': each indicator is one the taskbar has, and shows only when it has something to say.
 
-- **The cluster** at the right is the taskbar's: network (Wi-Fi with its signal, Ethernet, cellular, or a crossed globe with no internet), the battery with its percentage (laptops only; a desktop has none, so nothing shows), and the volume. A click, or Win+A (Windows' key), opens **Quick Settings** like Windows 11's: Wi-Fi and Bluetooth buttons for the radios the machine has (switching them through Windows' Radio API, so Settings and the buttons agree), battery saver as a status, the brightness slider where there is one, the volume slider with the output device's name, a line with the connection and the battery, and under Explorer an **All settings** row for the rest. Right-clicking the cluster mutes, scrolling changes the volume. Night light isn't there: Windows has no supported API for it.
+- **The cluster** at the right is the taskbar's: network (Wi-Fi with its signal, Ethernet, cellular, or a crossed globe with no internet), the battery with its percentage (laptops only; a desktop has none, so nothing shows), and the volume (the speaker alone, without a percentage; it's in Quick Settings). A click, or Win+A (Windows' key), opens **Quick Settings** like Windows 11's: Wi-Fi and Bluetooth buttons for the radios the machine has (switching them through Windows' Radio API, so Settings and the buttons agree), battery saver as a status, the brightness slider where there is one, the volume slider with the output device's name, a line with the connection and the battery, and under Explorer an **All settings** row for the rest. Right-clicking the cluster mutes, scrolling changes the volume. Night light isn't there: Windows has no supported API for it.
 - **Keyboard layout**, next to the clock, only when more than one is installed, as Windows' input indicator: the language's code ("ENG"), following the window you're typing in. A click switches it, as Win+Space does.
 - **Restart required**, next to the clock, when Windows Update has installed something and is waiting for a restart (the icon Explorer's taskbar shows). A click opens the menu, whose Restart row does it; under Explorer it opens Windows Update.
 - **Microphone, camera and location** in use, left of the clock: Windows' privacy indicators, read from the same per-app access store Windows keeps for its own.

@@ -37,11 +37,30 @@ PanelWindow {
             radius: 6
             color: launcherMouse.containsMouse ? Theme.surface : "transparent"
 
-            Icon {
+            // Windows' own Start logo, four panes. Segoe Fluent Icons has no
+            // Windows logo, so it is drawn here.
+            Canvas {
+                id: startLogo
                 anchors.centerIn: parent
-                glyph: "\uE71D" // AllApps
-                color: Theme.accent
-                font.pixelSize: 16
+                width: 15
+                height: 15
+                onPaint: {
+                    const ctx = getContext("2d")
+                    ctx.reset()
+                    const gradient = ctx.createLinearGradient(0, 0, width, height)
+                    gradient.addColorStop(0, Theme.startLogoFrom)
+                    gradient.addColorStop(1, Theme.startLogoTo)
+                    ctx.fillStyle = gradient
+                    const pane = (width - 1) / 2
+                    for (const x of [0, pane + 1])
+                        for (const y of [0, pane + 1])
+                            ctx.fillRect(x, y, pane, pane)
+                }
+
+                Connections {
+                    target: Themes
+                    function onColorsChanged() { startLogo.requestPaint() }
+                }
             }
 
             MouseArea {
@@ -169,6 +188,7 @@ PanelWindow {
                 spacing: 10
 
                 Icon {
+                    id: networkIcon
                     anchors.verticalCenter: parent.verticalCenter
                     glyph: !Network.connected && Network.kind !== "wifi" ? "\uF384"
                          : Network.kind === "ethernet" ? "\uE839"
@@ -200,21 +220,18 @@ PanelWindow {
                     }
                 }
 
-                Row {
+                // The speaker only, no percentage (Windows shows it on hover
+                // and in the flyout). Its glyphs fill less of the em box than
+                // Ethernet's and no-internet's, so it grows to match those.
+                Icon {
                     anchors.verticalCenter: parent.verticalCenter
-                    spacing: 6
                     opacity: Audio.muted ? 0.5 : 1
-                    Icon {
-                        anchors.verticalCenter: parent.verticalCenter
-                        glyph: Audio.muted ? ""
-                             : Audio.volume < 0.01 ? ""
-                             : Audio.volume < 0.34 ? ""
-                             : Audio.volume < 0.67 ? "" : ""
-                    }
-                    Label {
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: Math.round(Audio.volume * 100) + "%"
-                    }
+                    font.pixelSize: ["\uE839", "\uF384"].includes(networkIcon.glyph)
+                                    ? Math.round((Theme.fontSize + 1) * 1.4) : Theme.fontSize + 1
+                    glyph: Audio.muted ? "\uE74F" // Mute
+                         : Audio.volume < 0.01 ? "\uE992" // Volume0
+                         : Audio.volume < 0.34 ? "\uE993"
+                         : Audio.volume < 0.67 ? "\uE994" : "\uE995"
                 }
             }
 
